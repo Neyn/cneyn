@@ -3,25 +3,6 @@ project(Neyn VERSION 0.1.0 LANGUAGES C)
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-set(NEYN_HEADERS
-    "neyn/common.h"
-    "neyn/neyn.h"
-    "neyn/server.h"
-    CACHE INTERNAL "")
-string(REPLACE "neyn/" "${CMAKE_CURRENT_SOURCE_DIR}/neyn/"
-    NEYN_HEADERS "${NEYN_HEADERS}")
-
-set(NEYN_SOURCES
-    "neyn/client.h"
-    "neyn/parser.h"
-    "neyn/client.c"
-    "neyn/common.c"
-    "neyn/parser.c"
-    "neyn/server.c"
-    CACHE INTERNAL "")
-string(REPLACE "neyn/" "${CMAKE_CURRENT_SOURCE_DIR}/neyn/"
-    NEYN_SOURCES "${NEYN_SOURCES}")
-
 set(NEYN_MASTER OFF CACHE INTERNAL "")
 if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
     set(NEYN_MASTER ON CACHE INTERNAL "")
@@ -34,16 +15,25 @@ option(NEYN_BUILD_TESTS "Build Neyn C Tests" ${NEYN_MASTER})
 option(NEYN_INSTALL_LIB "Install Neyn C Library" ${NEYN_MASTER})
 option(NEYN_STATIC_LIB "Build Neyn C Static Library" OFF)
 
+file(GLOB HEADERS
+    "${CMAKE_CURRENT_SOURCE_DIR}/neyn/common.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/neyn/neyn.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/neyn/server.h"
+    "${CMAKE_CURRENT_BINARY_DIR}/config.h")
+file(GLOB SOURCES
+    "${CMAKE_CURRENT_SOURCE_DIR}/neyn/*.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/neyn/*.c")
+
 if (NEYN_STATIC_LIB)
-    add_library(neyn STATIC ${NEYN_SOURCES})
+    add_library(neyn STATIC ${SOURCES})
 else()
-    add_library(neyn SHARED ${NEYN_SOURCES})
+    add_library(neyn SHARED ${SOURCES})
 endif()
 
 target_link_libraries(neyn PUBLIC m pthread)
 target_include_directories(neyn PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/>
     $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_PREFIX}/include/>)
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/neyn/config.h.in" "${CMAKE_CURRENT_BINARY_DIR}/config.h")
 
@@ -53,8 +43,7 @@ if(NEYN_INSTALL_LIB)
         ARCHIVE DESTINATION lib
         LIBRARY DESTINATION lib
         RUNTIME DESTINATION bin)
-    install(FILES ${NEYN_HEADERS}
-        ${CMAKE_CURRENT_BINARY_DIR}/config.h
+    install(FILES ${HEADERS}
         DESTINATION include/neyn)
     install(EXPORT neynConfig
         NAMESPACE neyn::
