@@ -11,9 +11,9 @@ endif()
 set(NEYN_VERSION ${PROJECT_VERSION} CACHE INTERNAL "")
 set(NEYN_INCLUDE_DIR "${CMAKE_CURRENT_LIST_DIR}" CACHE INTERNAL "")
 set(NEYN_LIBRARIES "neyn" CACHE INTERNAL "")
+option(NEYN_BUILD_LIB "Build Neyn C Library" ON)
 option(NEYN_BUILD_TESTS "Build Neyn C Tests" ${NEYN_MASTER})
 option(NEYN_INSTALL_LIB "Install Neyn C Library" ${NEYN_MASTER})
-option(NEYN_STATIC_LIB "Build Neyn C Static Library" OFF)
 
 file(GLOB HEADERS
     "${CMAKE_CURRENT_SOURCE_DIR}/neyn/common.h"
@@ -24,18 +24,15 @@ file(GLOB SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/neyn/*.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/neyn/*.c")
 
-if (NEYN_STATIC_LIB)
-    add_library(neyn STATIC ${SOURCES})
-else()
-    add_library(neyn SHARED ${SOURCES})
-endif()
-
-target_link_libraries(neyn PUBLIC m pthread)
-target_include_directories(neyn PUBLIC
-    $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/>
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/>
-    $<INSTALL_INTERFACE:${CMAKE_INSTALL_PREFIX}/include/>)
-configure_file("${CMAKE_CURRENT_SOURCE_DIR}/neyn/config.h.in" "${CMAKE_CURRENT_BINARY_DIR}/config.h")
+if(NEYN_BUILD_LIB)
+    add_library(neyn ${SOURCES})
+    target_link_libraries(neyn PUBLIC m pthread)
+    target_include_directories(neyn PUBLIC
+        $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/>
+        $<INSTALL_INTERFACE:${CMAKE_INSTALL_PREFIX}/include/>)
+    configure_file("${CMAKE_CURRENT_SOURCE_DIR}/neyn/config.h.in" "${CMAKE_CURRENT_BINARY_DIR}/config.h")
+endif(NEYN_BUILD_LIB)
 
 if(NEYN_INSTALL_LIB)
     install(TARGETS neyn
