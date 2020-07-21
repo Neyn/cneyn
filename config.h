@@ -1,0 +1,8 @@
+#ifndef CONFIG_H
+#define CONFIG_H
+
+#define NEYN_VERSION_MAJOR 0
+#define NEYN_VERSION_MINOR 1
+#define NEYN_VERSION_PATCH 0
+
+#endif // CONFIG_H
