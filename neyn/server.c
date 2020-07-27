@@ -36,7 +36,6 @@ enum neyn_error neyn_server_create(struct neyn_server *server)
     server->socket = socket(AF_INET, SOCK_STREAM, 0);
     if (server->socket < 0) return neyn_error_socket_create;
     if (setsockopt(server->socket, SOL_SOCKET, SO_REUSEADDR, &O, sizeof(O)) < 0) return neyn_error_set_reuse;
-    //    if (fcntl(server->socket, F_SETFL, O_NONBLOCK) < 0) return neyn_error_set_nonblock;
     if (inet_pton(AF_INET, server->address, &address.sin_addr) != 1) return neyn_error_set_address;
     if (bind(server->socket, (struct sockaddr *)&address, sizeof(address)) < 0) return neyn_error_set_address;
     if (listen(server->socket, 1024) < 0) return neyn_error_socket_listen;
@@ -94,7 +93,7 @@ enum neyn_error neyn_server_accept(int epoll, struct neyn_server *server)
     return neyn_error_none;
 }
 
-int neyn_loop_process(struct neyn_loop *loop, struct epoll_event *event)
+int neyn_server_process(struct neyn_loop *loop, struct epoll_event *event)
 {
     enum neyn_progress progress;
     struct neyn_client *client = event->data.ptr;
@@ -139,7 +138,7 @@ int neyn_loop_process(struct neyn_loop *loop, struct epoll_event *event)
     return 1;
 }
 
-enum neyn_error neyn_loop_listen_(struct neyn_loop *loop)
+enum neyn_error neyn_multi_listen_(struct neyn_loop *loop)
 {
     neyn_size index = 0;
     struct epoll_event events[1024];
@@ -149,7 +148,7 @@ enum neyn_error neyn_loop_listen_(struct neyn_loop *loop)
         int size = epoll_wait(loop->socket, events, 1024, -1);
         if (size < 0) return neyn_error_epoll_wait;
         for (int i = 0; i < size; ++i)
-            if (neyn_loop_process(loop, &events[i]) != 1)
+            if (neyn_server_process(loop, &events[i]) != 1)
             {
                 struct neyn_client *client = events[i].data.ptr;
                 if (client->socket >= 0) close(client->socket);
@@ -162,9 +161,9 @@ enum neyn_error neyn_loop_listen_(struct neyn_loop *loop)
     }
 }
 
-void *neyn_loop_listen(void *loop)
+void *neyn_multi_listen(void *loop)
 {
-    neyn_loop_listen_(loop);
+    neyn_multi_listen_(loop);
     return NULL;
 }
 
@@ -177,7 +176,7 @@ enum neyn_error neyn_server_run_(struct neyn_server *server, struct neyn_loop *l
     {
         loops[i].socket = epoll_create(1024);
         if (loops[i].socket < 0) return neyn_error_epoll_create;
-        if (pthread_create(&loops[i].thread, NULL, neyn_loop_listen, loops + i)) return neyn_error_thread_create;
+        if (pthread_create(&loops[i].thread, NULL, neyn_multi_listen, loops + i)) return neyn_error_thread_create;
         loops[i].flag = 1;
     }
 
@@ -190,11 +189,8 @@ enum neyn_error neyn_server_run_(struct neyn_server *server, struct neyn_loop *l
     }
 }
 
-enum neyn_error neyn_server_run(struct neyn_server *server)
+enum neyn_error neyn_multi_run(struct neyn_server *server)
 {
-    if (server->threads == 0) return neyn_error_wrong_parameter;
-
-    server->socket = -1;
     struct neyn_loop loops[server->threads];
     for (neyn_size i = 0; i < server->threads; ++i)
     {
@@ -211,4 +207,62 @@ enum neyn_error neyn_server_run(struct neyn_server *server)
         if (loops->flag == 1) pthread_cancel(loops[i].thread);
     }
     return error;
+}
+
+enum neyn_error neyn_single_listen(struct neyn_loop *loop)
+{
+    neyn_size index = 0;
+    struct epoll_event events[1024];
+    struct neyn_client *clients[1024];
+    while (1)
+    {
+        int size = epoll_wait(loop->socket, events, 1024, -1);
+        if (size < 0) return neyn_error_epoll_wait;
+        for (int i = 0; i < size; ++i)
+            if (events[i].data.fd == loop->server->socket)
+            {
+                if (events[i].events & EPOLLERR) return neyn_error_socket_error;
+                neyn_server_accept(loop->socket, loop->server);
+            }
+            else if (neyn_server_process(loop, &events[i]) != 1)
+            {
+                struct neyn_client *client = events[i].data.ptr;
+                if (client->socket >= 0) close(client->socket);
+                if (client->timer >= 0) close(client->timer);
+                client->socket = -1, client->timer = -1;
+                clients[index++] = client;
+            }
+        for (neyn_size i = 0; i < index; ++i) neyn_client_destroy(clients[i]);
+        index = 0;
+    }
+}
+
+enum neyn_error neyn_single_run_(struct neyn_server *server, struct neyn_loop *loop)
+{
+    enum neyn_error error = neyn_server_create(server);
+    if (fcntl(server->socket, F_SETFL, O_NONBLOCK) < 0) return neyn_error_set_nonblock;
+    if (error != neyn_error_none) return error;
+
+    loop->socket = epoll_create(1024);
+    if (loop->socket < 0) return neyn_error_epoll_create;
+    struct epoll_event event = {.events = EPOLLIN | EPOLLERR, .data.fd = server->socket};
+    if (epoll_ctl(loop->socket, EPOLL_CTL_ADD, server->socket, &event) < 0) return neyn_error_epoll_add;
+    return neyn_single_listen(loop);
+}
+
+enum neyn_error neyn_single_run(struct neyn_server *server)
+{
+    struct neyn_loop loop = {.socket = -1, .server = server};
+    enum neyn_error error = neyn_single_run_(server, &loop);
+    if (server->socket >= 0) close(server->socket);
+    if (loop.socket >= 0) close(loop.socket);
+    return error;
+}
+
+enum neyn_error neyn_server_run(struct neyn_server *server)
+{
+    if (server->threads == 0) return neyn_error_wrong_parameter;
+    server->socket = -1;
+    if (server->threads == 1) return neyn_single_run(server);
+    return neyn_multi_run(server);
 }

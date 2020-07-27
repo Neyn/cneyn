@@ -17,7 +17,6 @@ int main()
 {
     struct neyn_server server;
     neyn_server_init(&server);
-    server.threads = 7;
     server.handler = handler;
     neyn_server_run(&server);
     return 0;
