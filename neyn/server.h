@@ -1,5 +1,5 @@
-#ifndef SERVER_H
-#define SERVER_H
+#ifndef NEYN_SERVER_H
+#define NEYN_SERVER_H
 
 #include "common.h"
 
@@ -17,4 +17,4 @@ void neyn_server_init(struct neyn_server *server);
 
 enum neyn_error neyn_server_run(struct neyn_server *server);
 
-#endif  // SERVER_H
+#endif  // NEYN_SERVER_H
