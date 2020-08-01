@@ -105,13 +105,13 @@ void neyn_response_ptr(struct neyn_response *response, char *ptr)
     for (neyn_size i = 0; i < response->header_len; ++i)
     {
         struct neyn_header *header = &response->header_ptr[i];
-        ptr = strncpy(ptr, header->name_ptr, header->name_len) + header->name_len;
+        ptr = memcpy(ptr, header->name_ptr, header->name_len) + header->name_len;
         ptr = strcpy(ptr, ": ") + 2;
-        ptr = strncpy(ptr, header->value_ptr, header->value_len) + header->value_len;
+        ptr = memcpy(ptr, header->value_ptr, header->value_len) + header->value_len;
         ptr = strcpy(ptr, "\r\n") + 2;
     }
     ptr = strcpy(ptr, "\r\n") + 2;
-    ptr = strncpy(ptr, response->body_ptr, response->body_len) + response->body_len;
+    ptr = memcpy(ptr, response->body_ptr, response->body_len) + response->body_len;
 }
 
 void neyn_response_write(struct neyn_response *response, struct neyn_output *output)
