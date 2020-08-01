@@ -1,5 +1,5 @@
-#ifndef CLIENT_H
-#define CLIENT_H
+#ifndef NEYN_CLIENT_H
+#define NEYN_CLIENT_H
 
 #include "common.h"
 
@@ -43,4 +43,4 @@ enum neyn_progress neyn_client_write(struct neyn_client *client);
 
 void neyn_client_error(struct neyn_client *client, enum neyn_status status);
 
-#endif  // CLIENT_H
+#endif  // NEYN_CLIENT_H

@@ -1,8 +1,8 @@
-#ifndef NEYN_H
-#define NEYN_H
+#ifndef NEYN_NEYN_H
+#define NEYN_NEYN_H
 
 #include "common.h"
 #include "config.h"
 #include "server.h"
 
-#endif  // NEYN_H
+#endif  // NEYN_NEYN_H
