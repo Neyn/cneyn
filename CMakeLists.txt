@@ -22,7 +22,6 @@ file(GLOB HEADERS
     "${CMAKE_CURRENT_SOURCE_DIR}/src/server.h"
     "${CMAKE_CURRENT_BINARY_DIR}/config.h")
 file(GLOB SOURCES
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/cneyn"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c")
 
