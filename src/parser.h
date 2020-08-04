@@ -1,5 +1,5 @@
-#ifndef NEYN_PARSER_H
-#define NEYN_PARSER_H
+#ifndef CNEYN_PARSER_H
+#define CNEYN_PARSER_H
 
 #include "common.h"
 
@@ -12,4 +12,4 @@ struct neyn_parser
 
 enum neyn_status neyn_parser_parse(struct neyn_parser *parser);
 
-#endif  // NEYN_PARSER_H
+#endif  // CNEYN_PARSER_H

@@ -1,5 +1,5 @@
-#ifndef NEYN_COMMON_H
-#define NEYN_COMMON_H
+#ifndef CNEYN_COMMON_H
+#define CNEYN_COMMON_H
 
 #include <errno.h>
 #include <stdint.h>
@@ -135,4 +135,4 @@ void neyn_response_write(struct neyn_response *response, struct neyn_output *out
 
 int neyn_string_icmp(const char *str1, const char *str2, neyn_size len);
 
-#endif  // NEYN_COMMON_H
+#endif  // CNEYN_COMMON_H

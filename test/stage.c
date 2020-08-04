@@ -1,7 +1,6 @@
 #include <stdio.h>
 
-#include "neyn/common.h"
-#include "neyn/server.h"
+#include "src/cneyn"
 
 void handler(struct neyn_request *request, struct neyn_output *output, void *data)
 {

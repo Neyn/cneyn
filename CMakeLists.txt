@@ -1,56 +1,61 @@
 cmake_minimum_required(VERSION 3.5)
-project(Neyn VERSION 0.1.0 LANGUAGES C)
+project(CNeyn VERSION 0.1.0 LANGUAGES C)
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-set(NEYN_MASTER OFF CACHE INTERNAL "")
+set(CNEYN_MASTER OFF CACHE INTERNAL "")
 if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
-    set(NEYN_MASTER ON CACHE INTERNAL "")
+    set(CNEYN_MASTER ON CACHE INTERNAL "")
 endif()
 
-set(NEYN_VERSION ${PROJECT_VERSION} CACHE INTERNAL "")
-set(NEYN_INCLUDE_DIR "${CMAKE_CURRENT_LIST_DIR}" CACHE INTERNAL "")
-set(NEYN_LIBRARIES "neyn" CACHE INTERNAL "")
-option(NEYN_BUILD_LIB "Build Neyn C Library" ON)
-option(NEYN_BUILD_TESTS "Build Neyn C Tests" ${NEYN_MASTER})
-option(NEYN_INSTALL_LIB "Install Neyn C Library" ${NEYN_MASTER})
+set(CNEYN_VERSION ${PROJECT_VERSION} CACHE INTERNAL "")
+set(CNEYN_INCLUDE_DIR "${CMAKE_CURRENT_LIST_DIR}" CACHE INTERNAL "")
+set(CNEYN_LIBRARIES "cneyn" CACHE INTERNAL "")
+
+option(CNEYN_BUILD_LIB "Build Neyn C Library" ON)
+option(CNEYN_BUILD_TESTS "Build Neyn C Tests" ${CNEYN_MASTER})
+option(CNEYN_INSTALL_LIB "Install Neyn C Library" ${CNEYN_MASTER})
 
 file(GLOB HEADERS
-    "${CMAKE_CURRENT_SOURCE_DIR}/neyn/common.h"
-    "${CMAKE_CURRENT_SOURCE_DIR}/neyn/neyn.h"
-    "${CMAKE_CURRENT_SOURCE_DIR}/neyn/server.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/common.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/neyn"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/server.h"
     "${CMAKE_CURRENT_BINARY_DIR}/config.h")
 file(GLOB SOURCES
-    "${CMAKE_CURRENT_SOURCE_DIR}/neyn/*.h"
-    "${CMAKE_CURRENT_SOURCE_DIR}/neyn/*.c")
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/cneyn"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/*.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c")
 
-if(NEYN_BUILD_LIB)
-    add_library(neyn ${SOURCES})
-    target_link_libraries(neyn PUBLIC m pthread)
-    target_include_directories(neyn PUBLIC
+if(CNEYN_BUILD_LIB)
+    add_library(cneyn ${SOURCES})
+    target_link_libraries(cneyn PUBLIC m pthread)
+
+    target_include_directories(cneyn PUBLIC
         $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/>
         $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/>
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_PREFIX}/include/>)
-    configure_file("${CMAKE_CURRENT_SOURCE_DIR}/neyn/config.h.in" "${CMAKE_CURRENT_BINARY_DIR}/config.h")
-endif(NEYN_BUILD_LIB)
+    configure_file(
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/config.h.in"
+        "${CMAKE_CURRENT_BINARY_DIR}/config.h")
+endif()
 
-if(NEYN_INSTALL_LIB)
-    install(TARGETS neyn
-        EXPORT neynConfig
+if(CNEYN_INSTALL_LIB)
+    install(TARGETS cneyn
+        EXPORT cneynConfig
         ARCHIVE DESTINATION lib
         LIBRARY DESTINATION lib
         RUNTIME DESTINATION bin)
     install(FILES ${HEADERS}
-        DESTINATION include/neyn)
-    install(EXPORT neynConfig
-        NAMESPACE neyn::
-        DESTINATION lib/cmake/neyn)
-    export(TARGETS neyn
-        NAMESPACE neyn::
-        FILE ${PROJECT_BINARY_DIR}/neynConfig.cmake)
-endif(NEYN_INSTALL_LIB)
+        DESTINATION include/cneyn)
+    install(EXPORT cneynConfig
+        NAMESPACE cneyn::
+        DESTINATION lib/cmake/cneyn)
+    export(TARGETS cneyn
+        NAMESPACE cneyn::
+        FILE ${PROJECT_BINARY_DIR}/cneynConfig.cmake)
+endif()
 
-if(NEYN_BUILD_TESTS)
-    add_executable(stage "stage/main.c")
-    target_link_libraries(stage PUBLIC neyn)
-endif(NEYN_BUILD_TESTS)
+if(CNEYN_BUILD_TESTS)
+    add_executable(stage "test/stage.c")
+    target_link_libraries(stage PUBLIC cneyn)
+endif()
