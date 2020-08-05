@@ -18,7 +18,7 @@ option(CNEYN_INSTALL_LIB "Install Neyn C Library" ${CNEYN_MASTER})
 
 file(GLOB HEADERS
     "${CMAKE_CURRENT_SOURCE_DIR}/src/common.h"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/neyn"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/cneyn.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/server.h"
     "${CMAKE_CURRENT_BINARY_DIR}/config.h")
 file(GLOB SOURCES
