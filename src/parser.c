@@ -54,11 +54,11 @@ enum neyn_status neyn_parser_first(struct neyn_parser *parser)
     if ((parser->begin++)[0] != 'T') return neyn_status_bad_request;
     if ((parser->begin++)[0] != 'P') return neyn_status_bad_request;
     if ((parser->begin++)[0] != '/') return neyn_status_bad_request;
-    parser->request->major = (parser->begin++)[0] - '0';
+    parser->request->major = (uint16_t)strtol(parser->begin, &parser->begin, 10);
+    if (parser->request->major == 0 && errno != 0) return neyn_status_bad_request;
     if ((parser->begin++)[0] != '.') return neyn_status_bad_request;
-    parser->request->minor = (parser->begin++)[0] - '0';
-
-    if (parser->request->major > 9 && parser->request->minor > 9) return neyn_status_bad_request;
+    parser->request->minor = (uint16_t)strtol(parser->begin, &parser->begin, 10);
+    if (parser->request->minor == 0 && errno != 0) return neyn_status_bad_request;
     SKIP(neyn_status_ok) return neyn_status_bad_request;
 }
 

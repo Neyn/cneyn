@@ -20,6 +20,7 @@ struct neyn_client *neyn_client_create()
 {
     struct neyn_client *client = malloc(sizeof(struct neyn_client));
     client->state = neyn_state_read_header;
+    client->input_idx = 0;
     client->input_len = 0;
     client->input_max = 1024;
     client->input_ptr = malloc(1024);
@@ -69,7 +70,7 @@ enum neyn_read neyn_client_read(struct neyn_client *client)
     neyn_size len = client->input_len;
     neyn_client_expand(client, size);
     if (recv(client->socket, client->input_ptr + len, size, 0) != size) return neyn_read_failed;
-    client->input_ptr[client->input_len] = 0;
+    client->input_ptr[client->input_len] = '\0';
     return neyn_read_ok;
 }
 

@@ -20,7 +20,7 @@ struct neyn_loop
 
 void neyn_server_init(struct neyn_server *server)
 {
-    server->port = 8080;
+    server->port = 8081;
     server->address = "0.0.0.0";
     server->timeout = 0;
     server->limit = 0;
