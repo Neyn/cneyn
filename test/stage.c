@@ -1,6 +1,6 @@
 #include <stdio.h>
 
-#include "src/cneyn"
+#include "src/cneyn.h"
 
 void handler(struct neyn_request *request, struct neyn_output *output, void *data)
 {
