@@ -1,13 +1,11 @@
 #ifndef CNEYN_COMMON_H
 #define CNEYN_COMMON_H
 
+#include <arpa/inet.h>
+#include <cneyn/config.h>
 #include <errno.h>
 #include <stdint.h>
 #include <stdio.h>
-
-#include "config.h"
-
-typedef size_t neyn_size;
 
 enum neyn_error
 {
@@ -100,39 +98,45 @@ extern const char *neyn_method_list[6];
 extern const char *neyn_status_code[63];
 extern const char *neyn_status_phrase[63];
 
+typedef size_t neyn_size;
+
+struct neyn_string
+{
+    neyn_size len;
+    char *ptr;
+};
+
 struct neyn_header
 {
-    neyn_size name_len, value_len;
-    char *name_ptr, *value_ptr;
+    struct neyn_string name, value;
+};
+
+struct neyn_headers
+{
+    neyn_size len;
+    struct neyn_header *ptr;
 };
 
 struct neyn_request
 {
     uint16_t port, major, minor;
-    neyn_size method_len, path_len, body_len, header_len;
-    char *method_ptr, *path_ptr, *body_ptr;
-    struct neyn_header *header_ptr;
-    char address[16];
-};
-
-struct neyn_output
-{
-    neyn_size body_len, body_idx;
-    char *body_ptr;
+    char address[INET6_ADDRSTRLEN];  // TODO fix this
+    struct neyn_string method, path, body;
+    struct neyn_headers header;
 };
 
 struct neyn_response
 {
+    int isfile;
     enum neyn_status status;
-    neyn_size body_len, header_len;
-    char *body_ptr;
-    struct neyn_header *header_ptr;
+    struct neyn_string body;
+    struct neyn_headers header;
+    void *client;
+    FILE *file;
 };
 
 void neyn_response_init(struct neyn_response *response);
 
-void neyn_response_write(struct neyn_response *response, struct neyn_output *output);
-
-int neyn_string_icmp(const char *str1, const char *str2, neyn_size len);
+void neyn_response_write(struct neyn_response *response);
 
 #endif  // CNEYN_COMMON_H

@@ -1,5 +1,6 @@
 #include "client.h"
 
+#include <cneyn/parser.h>
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -7,7 +8,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-#include "parser.h"
+#define CNEYN_BUFFER_LEN 1024 * 1024
 
 enum neyn_read
 {
@@ -16,31 +17,31 @@ enum neyn_read
     neyn_read_over_limit,
 };
 
-struct neyn_client *neyn_client_create()
+void neyn_client_init(struct neyn_client *client)
 {
-    struct neyn_client *client = malloc(sizeof(struct neyn_client));
     client->state = neyn_state_read_header;
-    client->input_idx = 0;
-    client->input_len = 0;
-    client->input_max = 1024;
-    client->input_ptr = malloc(1024);
-    client->request.body_len = 0;
-    client->request.body_ptr = NULL;
-    client->request.header_len = 0;
-    client->request.header_ptr = NULL;
-    client->output.body_len = 0;
-    client->output.body_ptr = NULL;
-    return client;
+    client->max = 1024;
+    client->ptr = malloc(1024);
+
+    client->idx = 0;
+    client->len = 0;
+    client->ptr = NULL;
+    client->file = NULL;
+
+    client->request.body.len = 0;
+    client->request.body.ptr = NULL;
+    client->request.header.len = 0;
+    client->request.header.ptr = NULL;
 }
 
 void neyn_client_destroy(struct neyn_client *client)
 {
     if (client->timer >= 0) close(client->timer);
     if (client->socket >= 0) close(client->socket);
-    if (client->output.body_ptr != NULL) free(client->output.body_ptr);
-    if (client->request.header_ptr != NULL) free(client->request.header_ptr);
-    free(client->input_ptr);
-    free(client);
+
+    free(client->ptr);
+    if (client->file != NULL) fclose(client->file);
+    if (client->request.header.ptr != NULL) free(client->request.header.ptr);
 }
 
 void neyn_client_error(struct neyn_client *client, enum neyn_status status)
@@ -48,15 +49,16 @@ void neyn_client_error(struct neyn_client *client, enum neyn_status status)
     struct neyn_response response;
     neyn_response_init(&response);
     response.status = status;
-    neyn_response_write(&response, &client->output);
+    response.client = client;
+    neyn_response_write(&response);
 }
 
 void neyn_client_expand(struct neyn_client *client, int size)
 {
-    client->input_len += size;
-    if (client->input_len + 1 <= client->input_max) return;
-    client->input_max = pow(2, ceil(log2(client->input_len + 1)));
-    client->input_ptr = realloc(client->input_ptr, client->input_max);
+    client->len += size;
+    if (client->len <= client->max) return;
+    client->max = pow(2, ceil(log2(client->len)));
+    client->ptr = realloc(client->ptr, client->max);
 }
 
 enum neyn_read neyn_client_read(struct neyn_client *client)
@@ -65,85 +67,244 @@ enum neyn_read neyn_client_read(struct neyn_client *client)
     ioctl(client->socket, FIONREAD, &size);
     if (size == 0) return neyn_read_ok;
     if (size < 0) return neyn_read_failed;
-    if (client->input_lim > 0 && size + client->input_len >= client->input_lim) return neyn_read_over_limit;
+    if (client->lim > 0 && size + client->len >= client->lim) return neyn_read_over_limit;
 
-    neyn_size len = client->input_len;
+    neyn_size len = client->len;
     neyn_client_expand(client, size);
-    if (recv(client->socket, client->input_ptr + len, size, 0) != size) return neyn_read_failed;
-    client->input_ptr[client->input_len] = '\0';
+    if (recv(client->socket, client->ptr + len, size, 0) != size) return neyn_read_failed;
     return neyn_read_ok;
+}
+
+char *neyn_client_endl2(struct neyn_string *string)
+{
+    for (char *i = string->ptr; i < string->ptr + string->len - 3; ++i)
+        if (i[0] == '\r' && i[1] == '\n' && i[2] == '\r' && i[3] == '\n') return i;
+    return NULL;
+}
+
+char *neyn_client_endl(struct neyn_string *string)
+{
+    for (char *i = string->ptr; i < string->ptr + string->len - 1; ++i)
+        if (i[0] == '\r' && i[1] == '\n') return i;
+    return NULL;
+}
+
+char *neyn_client_waste(struct neyn_string *string)
+{
+    char *i = string->ptr;
+    for (; i < string->ptr + string->len + 1; i += 2)
+        if (i[0] != '\r' || i[1] != '\n') break;
+    return i;
 }
 
 enum neyn_progress neyn_client_header(struct neyn_client *client)
 {
-    char *ptr = strstr(client->input_ptr, "\r\n\r\n");
+    struct neyn_string string = {.ptr = client->ptr, .len = client->len};
+    char *ptr = neyn_client_waste(&string);
+    string.len -= ptr - string.ptr, string.ptr = ptr;
+    ptr = neyn_client_endl2(&string);
     if (ptr == NULL) return neyn_progress_incomplete;
-    client->input_idx = ptr - client->input_ptr;
 
     struct neyn_parser parser;
     parser.request = &client->request;
-    parser.begin = client->input_ptr;
-    parser.finish = client->input_ptr + client->input_idx;
+    parser.ptr = string.ptr, parser.finish = ptr;
+    enum neyn_result result = neyn_parser_main(&parser);
+    client->ref = client->ptr, client->idx = ptr - client->ptr + 4;
 
-    enum neyn_status status = neyn_parser_parse(&parser);
-    client->input_ref = client->input_ptr;
-    client->input_idx += 4;
+    if (result == neyn_result_nobody) return neyn_progress_complete;
+    if (result == neyn_result_body)
+    {
+        client->request.body.len = parser.length;
+        client->state = neyn_state_read_body;
+        return neyn_progress_incomplete;
+    }
+    if (result == neyn_result_transfer)
+    {
+        client->chunk.idx = client->idx, client->chunk.ptr = client->idx;
+        client->state = neyn_state_chunk_header;
+        return neyn_progress_incomplete;
+    }
 
-    if (status == neyn_status_accepted) return neyn_progress_complete;
-    client->request.body_len = parser.length;
-    client->state = neyn_state_read_body;
-    if (status == neyn_status_continue) return neyn_progress_incomplete;
-    neyn_client_error(client, status);
+    if (result == neyn_result_failed) neyn_client_error(client, neyn_status_bad_request);
+    if (result == neyn_result_not_implemented) neyn_client_error(client, neyn_status_not_implemented);
+    if (result == neyn_result_not_supported) neyn_client_error(client, neyn_status_http_version_not_supported);
     return neyn_progress_failed;
 }
 
 enum neyn_progress neyn_client_body(struct neyn_client *client)
 {
-    if (client->input_len < client->input_idx + client->request.body_len) return neyn_progress_incomplete;
-    client->request.body_ptr = client->input_ptr + client->input_idx;
+    if (client->len < client->idx + client->request.body.len) return neyn_progress_incomplete;
+    client->request.body.ptr = client->ptr + client->idx;
     return neyn_progress_complete;
 }
 
-enum neyn_progress neyn_client_process(struct neyn_client *client)
+enum neyn_progress neyn_client_cheader(struct neyn_client *client)
 {
-    enum neyn_read read = neyn_client_read(client);
-    if (read == neyn_read_over_limit) neyn_client_error(client, neyn_status_payload_too_large);
-    if (read != neyn_read_ok) return neyn_progress_error;
-    if (client->state == neyn_state_read_header)
+    struct neyn_string string;
+    string.ptr = client->ptr + client->chunk.idx;
+    string.len = client->len - client->chunk.idx;
+    char *ptr = neyn_client_endl(&string);
+    if (ptr == NULL) return neyn_progress_incomplete;
+
+    struct neyn_parser parser;
+    parser.request = &client->request;
+    parser.ptr = string.ptr, parser.finish = ptr;
+    enum neyn_result result = neyn_parser_chunk(&parser);
+
+    if (result == neyn_result_failed)
     {
-        enum neyn_progress progress = neyn_client_header(client);
-        if (progress != neyn_progress_incomplete) return progress;
+        neyn_client_error(client, neyn_status_bad_request);
+        return neyn_progress_failed;
     }
-    if (client->state == neyn_state_read_body) return neyn_client_body(client);
+
+    client->chunk.len = parser.length;
+    if (client->chunk.len == 0)
+    {
+        client->chunk.idx += ptr - string.ptr;
+        client->state = neyn_state_chunk_body;
+    }
+    else
+    {
+        client->chunk.idx += ptr - string.ptr + 2;
+        client->state = neyn_state_chunk_trailer;
+    }
     return neyn_progress_incomplete;
+}
+
+enum neyn_progress neyn_client_cbody(struct neyn_client *client)
+{
+    if (client->chunk.idx + client->chunk.len > client->len) return neyn_progress_incomplete;
+    memmove(client->ptr + client->chunk.ptr, client->ptr + client->chunk.idx, client->chunk.len);
+    client->chunk.ptr += client->chunk.len, client->chunk.idx += client->chunk.len + 2;
+    client->state = neyn_state_chunk_header;
+    return neyn_progress_complete;
+}
+
+void neyn_input_repair(struct neyn_client *client)
+{
+    client->request.method.ptr = client->ptr + (client->request.method.ptr - client->ref);
+    client->request.path.ptr = client->ptr + (client->request.path.ptr - client->ref);
+
+    for (struct neyn_header *i = client->request.header.ptr;  //
+         i < client->request.header.ptr + client->request.header.len; ++i)
+    {
+        i->name.ptr = client->ptr + (i->name.ptr - client->ref);
+        i->value.ptr = client->ptr + (i->value.ptr - client->ref);
+    }
+}
+
+enum neyn_progress neyn_client_trailer(struct neyn_client *client)
+{
+    struct neyn_string string;
+    string.ptr = client->ptr + client->chunk.idx;
+    string.len = client->len - client->chunk.idx;
+    char *ptr = neyn_client_endl2(&string);
+    if (ptr == NULL) return neyn_progress_incomplete;
+
+    neyn_input_repair(client);
+    struct neyn_parser parser;
+    parser.request = &client->request;
+    parser.ptr = string.ptr, parser.finish = ptr;
+    enum neyn_result result = neyn_parser_trailer(&parser);
+
+    if (result == neyn_result_failed) return neyn_progress_failed;
+    client->request.body.ptr = client->ptr + client->idx;
+    client->request.body.len = client->chunk.ptr - client->idx;
+    return neyn_progress_complete;
 }
 
 void neyn_client_repair(struct neyn_client *client)
 {
-    client->request.method_ptr = client->input_ptr + (client->request.method_ptr - client->input_ref);
-    client->request.path_ptr = client->input_ptr + (client->request.path_ptr - client->input_ref);
-    for (neyn_size i = 0; i < client->request.header_len; ++i)
-    {
-        struct neyn_header *header = &client->request.header_ptr[i];
-        header->name_ptr = client->input_ptr + (header->name_ptr - client->input_ref);
-        header->value_ptr = client->input_ptr + (header->value_ptr - client->input_ref);
-    }
+    if (client->state != neyn_state_chunk_trailer) neyn_input_repair(client);
 }
 
 void neyn_client_prepare(struct neyn_client *client)
 {
-    client->output.body_idx = 0;
-    client->state = neyn_state_write;
+    client->idx = 0;
+    client->state = neyn_state_write_body;
 }
 
 enum neyn_progress neyn_client_write(struct neyn_client *client)
 {
-    if (client->state != neyn_state_write) return neyn_progress_nothing;
-    char *ptr = client->output.body_ptr + client->output.body_idx;
-    neyn_size len = client->output.body_len - client->output.body_idx;
+    char *ptr = client->ptr + client->idx;
+    neyn_size len = client->len - client->idx;
     ssize_t result = send(client->socket, ptr, len, MSG_NOSIGNAL);
     if (result < 0) return neyn_progress_failed;
 
-    client->output.body_idx += result;
-    return client->output.body_idx >= client->output.body_len ? neyn_progress_complete : neyn_progress_incomplete;
+    client->idx += result;
+    if (client->idx < client->len) return neyn_progress_incomplete;
+    if (client->file == NULL || client->state == neyn_state_write_final) return neyn_progress_complete;
+    client->state = neyn_state_write_file;
+    return neyn_progress_incomplete;
+}
+
+enum neyn_progress neyn_client_input(struct neyn_client *client)
+{
+    enum neyn_progress progress = neyn_progress_incomplete;
+    enum neyn_read read = neyn_client_read(client);
+    if (read == neyn_read_over_limit) neyn_client_error(client, neyn_status_payload_too_large);
+    if (read != neyn_read_ok) return neyn_progress_error;
+
+    if (client->state == neyn_state_read_header)
+    {
+        progress = neyn_client_header(client);
+        if (progress != neyn_progress_incomplete) return progress;
+    }
+    if (client->state == neyn_state_read_body) return neyn_client_body(client);
+
+    while (1)
+    {
+        if (client->state == neyn_state_chunk_header)
+        {
+            progress = neyn_client_cheader(client);
+            if (!(progress == neyn_progress_incomplete && client->state == neyn_state_chunk_body)) break;
+        }
+        else if (client->state == neyn_state_chunk_body)
+        {
+            progress = neyn_client_cbody(client);
+            if (progress == neyn_progress_incomplete) break;
+        }
+        else
+            break;
+    }
+
+    if (client->state == neyn_state_chunk_trailer) progress = neyn_client_trailer(client);
+    return progress;
+}
+
+enum neyn_progress neyn_client_file(struct neyn_client *client)
+{
+    if (client->max != 10 + CNEYN_BUFFER_LEN)
+    {
+        client->max = 10 + CNEYN_BUFFER_LEN;
+        client->ptr = realloc(client->ptr, client->max);
+    }
+    int len = fread(client->ptr + 10, CNEYN_BUFFER_LEN, 1, client->file);
+    if (ferror(client->file)) return neyn_progress_failed;
+
+    if (len == 0)
+    {
+        strcpy(client->ptr, "0\r\n\r\n");
+        client->state = neyn_state_write_final;
+        client->len = 5;
+    }
+    else
+    {
+        int size = sprintf(client->ptr, "%X", len);
+        memmove(client->ptr, client->ptr + 8 - size, size);
+        for (int i = 0; i < 8 - size; ++i) client->ptr[i] = '0';
+        client->ptr[8] = '\r', client->ptr[9] = '\n';
+        client->state = neyn_state_write_body;
+        client->len += 10 + len;
+    }
+    return neyn_progress_incomplete;
+}
+
+enum neyn_progress neyn_client_output(struct neyn_client *client)
+{
+    if (client->state == neyn_state_write_body || client->state == neyn_state_write_final)
+        return neyn_client_write(client);
+    else if (client->state == neyn_state_write_file)
+        return neyn_client_file(client);
+    return neyn_progress_nothing;
 }

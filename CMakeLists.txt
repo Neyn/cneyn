@@ -1,7 +1,9 @@
 cmake_minimum_required(VERSION 3.5)
-project(CNeyn VERSION 0.1.0 LANGUAGES C)
+project(CNeyn VERSION 0.1.0 LANGUAGES C CXX)
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(CNEYN_MASTER OFF CACHE INTERNAL "")
 if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
@@ -9,12 +11,19 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
 endif()
 
 set(CNEYN_VERSION ${PROJECT_VERSION} CACHE INTERNAL "")
-set(CNEYN_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/" CACHE INTERNAL "")
 set(CNEYN_LIBRARIES "cneyn" CACHE INTERNAL "")
+set(CNEYN_INCLUDE_DIR_ "")
+list (APPEND CNEYN_INCLUDE_DIR_ "${CMAKE_CURRENT_SOURCE_DIR}/src/")
+list (APPEND CNEYN_INCLUDE_DIR_ "${CMAKE_CURRENT_BINARY_DIR}/gen/")
+set(CNEYN_INCLUDE_DIR ${CNEYN_INCLUDE_DIR_} CACHE INTERNAL "")
+
 option(CNEYN_BUILD_LIB "Build Neyn C Library" ON)
 option(CNEYN_BUILD_TESTS "Build Neyn C Tests" ${CNEYN_MASTER})
 option(CNEYN_INSTALL_LIB "Install Neyn C Library" ${CNEYN_MASTER})
 
+configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/cneyn/config.h.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/gen/cneyn/config.h")
 file(GLOB HEADERS
     "${CMAKE_CURRENT_SOURCE_DIR}/src/cneyn/common.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/cneyn/cneyn.h"
@@ -28,12 +37,9 @@ if(CNEYN_BUILD_LIB)
     add_library(cneyn ${SOURCES})
     target_link_libraries(cneyn PUBLIC m pthread)
     target_include_directories(cneyn PUBLIC
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/>
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/gen/>
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_PREFIX}/include/>)
-    configure_file(
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/cneyn/config.h.in"
-        "${CMAKE_CURRENT_BINARY_DIR}/config.h")
 endif()
 
 if(CNEYN_INSTALL_LIB)

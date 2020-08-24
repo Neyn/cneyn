@@ -1,5 +1,6 @@
 #include "common.h"
 
+#include <cneyn/client.h>
 #include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
@@ -83,47 +84,65 @@ const char *neyn_status_phrase[] = {
 
 void neyn_response_init(struct neyn_response *response)
 {
+    response->isfile = 0;
     response->status = neyn_status_ok;
-    response->body_len = 0;
-    response->header_len = 0;
+    response->body.len = 0;
+    response->header.len = 0;
 }
 
-neyn_size neyn_response_len(struct neyn_response *response)
+neyn_size neyn_response_len(struct neyn_response *response, struct neyn_string *string)
 {
     const char *str = "HTTP/1.1 xxx \r\n\r\n";
-    neyn_size size = strlen(str) + strlen(neyn_status_phrase[response->status]) + response->body_len;
-    for (neyn_size i = 0; i < response->header_len; ++i)
-        size += response->header_ptr[i].name_len + 2 + response->header_ptr[i].value_len + 2;
-    return size;
+    neyn_size size = strlen(str) + strlen(neyn_status_phrase[response->status]) + response->body.len;
+
+    for (struct neyn_header *i = response->header.ptr; i < response->header.ptr + response->header.len; ++i)
+        size += i->name.len + 2 + i->value.len + 2;
+    return size + string->len;
 }
 
-void neyn_response_ptr(struct neyn_response *response, char *ptr)
+void neyn_response_ptr(struct neyn_response *response, struct neyn_string *string, char *ptr)
 {
     const char *status = neyn_status_code[response->status];
     const char *phrase = neyn_status_phrase[response->status];
     ptr += sprintf(ptr, "HTTP/1.1 %s %s\r\n", status, phrase);
-    for (neyn_size i = 0; i < response->header_len; ++i)
+
+    for (struct neyn_header *i = response->header.ptr; i < response->header.ptr + response->header.len; ++i)
     {
-        struct neyn_header *header = &response->header_ptr[i];
-        ptr = memcpy(ptr, header->name_ptr, header->name_len) + header->name_len;
+        ptr = memcpy(ptr, i->name.ptr, i->name.len) + i->name.len;
         ptr = strcpy(ptr, ": ") + 2;
-        ptr = memcpy(ptr, header->value_ptr, header->value_len) + header->value_len;
+        ptr = memcpy(ptr, i->value.ptr, i->value.len) + i->value.len;
         ptr = strcpy(ptr, "\r\n") + 2;
     }
+
+    ptr = memcpy(ptr, string->ptr, string->len) + string->len;
     ptr = strcpy(ptr, "\r\n") + 2;
-    ptr = memcpy(ptr, response->body_ptr, response->body_len) + response->body_len;
+    ptr = memcpy(ptr, response->body.ptr, response->body.len);
 }
 
-void neyn_response_write(struct neyn_response *response, struct neyn_output *output)
+void neyn_response_helper(struct neyn_response *response, struct neyn_string *string)
 {
-    output->body_len = neyn_response_len(response);
-    output->body_ptr = malloc(output->body_len);
-    neyn_response_ptr(response, output->body_ptr);
+    const char *format;
+    if (response->isfile == 0)
+        format = "Content-Length: %zu\r\nUser-Agent: Neyn/%u.%u.%u\r\nConnection: Close\r\n";
+    else
+        format = "Transfer-Encoding: chunked\r\nUser-Agent: Neyn/%u.%u.%u\r\nConnection: Close\r\n";
+    string->len = sprintf(string->ptr, format, response->body.len,  //
+                          CNEYN_VERSION_MAJOR, CNEYN_VERSION_MINOR, CNEYN_VERSION_PATCH);
 }
 
-int neyn_string_icmp(const char *str1, const char *str2, neyn_size len)
+void neyn_response_write(struct neyn_response *response)
 {
-    for (neyn_size i = 0; i < len; ++i)
-        if (str2[i] == 0 || tolower(str1[i]) != tolower(str2[i])) return 0;
-    return str2[len] == 0;
+    char buffer[128];
+    struct neyn_string string = {.ptr = buffer};
+    struct neyn_client *client = response->client;
+
+    neyn_response_helper(response, &string);
+    client->len = neyn_response_len(response, &string);
+
+    if (client->max < client->len)
+    {
+        client->max = client->len;
+        client->ptr = realloc(client->ptr, client->max);
+    }
+    neyn_response_ptr(response, &string, client->ptr);
 }
