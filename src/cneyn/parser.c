@@ -14,12 +14,13 @@
 #define rskip \
     while (parser->ptr[-1] == ' ' || parser->ptr[-1] == '\t') --parser->ptr;
 
-#define find                                                                  \
-    while (!(parser->ptr[0] == ' ' || parser->ptr[0] == '\t')) ++parser->ptr; \
+#define find                                                                                               \
+    while (!(parser->ptr[0] == ' ' || parser->ptr[0] == '\t') && parser->ptr < parser->end) ++parser->ptr; \
     if (parser->ptr >= parser->end) return neyn_result_failed;
 
-#define cfind                                                                                          \
-    while (!(parser->ptr[0] == ' ' || parser->ptr[0] == '\t' || parser->ptr[0] == ':')) ++parser->ptr; \
+#define cfind                                                                                                        \
+    while (!(parser->ptr[0] == ' ' || parser->ptr[0] == '\t' || parser->ptr[0] == ':') && parser->ptr < parser->end) \
+        ++parser->ptr;                                                                                               \
     if (parser->ptr >= parser->end) return neyn_result_failed;
 
 int neyn_parser_icmp(struct neyn_string *str, char *ptr)
