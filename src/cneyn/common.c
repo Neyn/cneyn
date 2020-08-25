@@ -84,16 +84,17 @@ const char *neyn_status_phrase[] = {
 
 void neyn_response_init(struct neyn_response *response)
 {
-    response->isfile = 0;
     response->status = neyn_status_ok;
     response->body.len = 0;
     response->header.len = 0;
+    response->file = NULL;
 }
 
 neyn_size neyn_response_len(struct neyn_response *response, struct neyn_string *string)
 {
     const char *str = "HTTP/1.1 xxx \r\n\r\n";
-    neyn_size size = strlen(str) + strlen(neyn_status_phrase[response->status]) + response->body.len;
+    neyn_size size = strlen(str) + strlen(neyn_status_phrase[response->status]);
+    if (response->file == NULL) size += response->body.len;
 
     for (struct neyn_header *i = response->header.ptr; i < response->header.ptr + response->header.len; ++i)
         size += i->name.len + 2 + i->value.len + 2;
@@ -116,16 +117,17 @@ void neyn_response_ptr(struct neyn_response *response, struct neyn_string *strin
 
     ptr = memcpy(ptr, string->ptr, string->len) + string->len;
     ptr = strcpy(ptr, "\r\n") + 2;
-    ptr = memcpy(ptr, response->body.ptr, response->body.len);
+    if (response->file == NULL) ptr = memcpy(ptr, response->body.ptr, response->body.len);
 }
 
 void neyn_response_helper(struct neyn_response *response, struct neyn_string *string)
 {
     const char *format;
-    if (response->isfile == 0)
+    if (response->file == NULL)
         format = "Content-Length: %zu\r\nUser-Agent: Neyn/%u.%u.%u\r\nConnection: Close\r\n";
     else
         format = "Transfer-Encoding: chunked\r\nUser-Agent: Neyn/%u.%u.%u\r\nConnection: Close\r\n";
+
     string->len = sprintf(string->ptr, format, response->body.len,  //
                           CNEYN_VERSION_MAJOR, CNEYN_VERSION_MINOR, CNEYN_VERSION_PATCH);
 }
@@ -136,6 +138,7 @@ void neyn_response_write(struct neyn_response *response)
     struct neyn_string string = {.ptr = buffer};
     struct neyn_client *client = response->client;
 
+    client->file = response->file;
     neyn_response_helper(response, &string);
     client->len = neyn_response_len(response, &string);
 

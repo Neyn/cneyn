@@ -4,7 +4,9 @@
 #include <cneyn/client.h>
 #include <stdint.h>
 
+#ifndef CNEYN_POOL_SIZE
 #define CNEYN_POOL_SIZE (128 * sizeof(void *))
+#endif
 
 struct neyn_wrapper
 {

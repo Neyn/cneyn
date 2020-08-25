@@ -8,7 +8,9 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#ifndef CNEYN_BUFFER_LEN
 #define CNEYN_BUFFER_LEN 1024 * 1024
+#endif
 
 enum neyn_read
 {

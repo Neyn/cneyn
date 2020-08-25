@@ -127,7 +127,6 @@ struct neyn_request
 
 struct neyn_response
 {
-    int isfile;
     enum neyn_status status;
     struct neyn_string body;
     struct neyn_headers header;
