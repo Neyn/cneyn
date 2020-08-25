@@ -25,7 +25,6 @@ void neyn_client_init(struct neyn_client *client)
 
     client->idx = 0;
     client->len = 0;
-    client->ptr = NULL;
     client->file = NULL;
 
     client->request.body.len = 0;

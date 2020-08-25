@@ -113,7 +113,7 @@ enum neyn_error neyn_server_accept(struct neyn_thread *thread)
     {
         struct sockaddr_in *address = (struct sockaddr_in *)&addr;
         wrapper->client.request.port = address->sin_port;
-        strcpy(wrapper->client.request.address, inet_ntoa(address->sin_addr));
+        inet_ntop(AF_INET, &address->sin_addr, wrapper->client.request.address, INET6_ADDRSTRLEN);
     }
     else
     {
@@ -163,6 +163,7 @@ int neyn_server_process(struct neyn_thread *thread, struct epoll_event *event)
             neyn_client_repair(client);
             struct neyn_response response;
             neyn_response_init(&response);
+            response.client = client;
             thread->server->handler(&client->request, &response, thread->server->data);
         }
         if (progress != neyn_progress_incomplete)
@@ -247,8 +248,10 @@ enum neyn_error neyn_server_run(struct neyn_server *server, int block)
 
     enum neyn_error error;
     server->control->socket = -1;
-    if (server->config.ipvn == neyn_address_ipv4) error = neyn_server_create4(server);
-    if (server->config.ipvn == neyn_address_ipv6) error = neyn_server_create6(server);
+    if (server->config.ipvn == neyn_address_ipv4)
+        error = neyn_server_create4(server);
+    else
+        error = neyn_server_create6(server);
 
     if (error != neyn_error_none)
     {
@@ -263,6 +266,7 @@ enum neyn_error neyn_server_run(struct neyn_server *server, int block)
         i->flag = 0;
         i->server = server;
         i->socket = server->control->socket;
+        neyn_pool_init(&i->pool);
     }
 
     error = neyn_server_run_(server->control, block);
@@ -277,6 +281,7 @@ void neyn_server_kill(struct neyn_server *server)
     {
         if (i->flag == 1) pthread_cancel(i->thread);
         if (i->epoll >= 0) close(i->socket);
+        neyn_pool_destroy(&i->pool);
     }
     close(server->control->socket);
     free(server->control->thread);

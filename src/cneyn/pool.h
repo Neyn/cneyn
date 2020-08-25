@@ -14,7 +14,7 @@ struct neyn_wrapper
 
 struct neyn_block
 {
-    long long bits[CNEYN_POOL_SIZE / sizeof(long long)];
+    long long bits[CNEYN_POOL_SIZE / (8 * sizeof(long long))];
     struct neyn_wrapper ptr[CNEYN_POOL_SIZE];
 };
 

@@ -5,7 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define LEN (CNEYN_POOL_SIZE / sizeof(long long))
+#define LEN (CNEYN_POOL_SIZE / (8 * sizeof(long long)))
 
 struct neyn_block *neyn_block_create()
 {
@@ -21,7 +21,7 @@ int neyn_block_first(struct neyn_block *block)
         int index = ffsll(block->bits[i]);
         if (index <= 0) continue;
         block->bits[i] &= ~(1ULL << (index - 1));
-        return i * sizeof(long long) + (index - 1);
+        return i * 8 * sizeof(long long) + (index - 1);
     }
     return -1;
 }
@@ -69,6 +69,7 @@ struct neyn_wrapper *neyn_pool_alloc(struct neyn_pool *pool)
 
 void neyn_pool_free(struct neyn_pool *pool, struct neyn_wrapper *client)
 {
+    // TODO free if this is the last block and not the first one and the block is empty
     struct neyn_block *block = pool->block[client->major];
     block->bits[client->minor / LEN] |= 1ULL << (client->minor % LEN);
 }
