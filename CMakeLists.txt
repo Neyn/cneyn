@@ -33,9 +33,9 @@ if(CNEYN_BUILD_LIB)
     add_library(cneyn ${SOURCES})
     target_link_libraries(cneyn PUBLIC m pthread)
     target_include_directories(cneyn PUBLIC
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/>
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/gen/>
-        $<INSTALL_INTERFACE:${CMAKE_INSTALL_PREFIX}/include/>)
+        "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/>"
+        "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/gen/>"
+        "$<INSTALL_INTERFACE:${CMAKE_INSTALL_PREFIX}/include/>")
 endif()
 
 if(CNEYN_INSTALL_LIB)
@@ -51,7 +51,7 @@ if(CNEYN_INSTALL_LIB)
         DESTINATION lib/cmake/cneyn)
     export(TARGETS cneyn
         NAMESPACE cneyn::
-        FILE ${PROJECT_BINARY_DIR}/cneynConfig.cmake)
+        FILE "${PROJECT_BINARY_DIR}/cneynConfig.cmake")
 endif()
 
 if(CNEYN_BUILD_TESTS)
