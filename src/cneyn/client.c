@@ -157,14 +157,14 @@ enum neyn_progress neyn_client_cheader(struct neyn_client *client)
     }
 
     client->chunk.len = parser.length;
-    if (client->chunk.len == 0)
+    if (client->chunk.len != 0)
     {
-        client->chunk.idx += ptr - string.ptr;
+        client->chunk.idx += ptr - string.ptr + 2;
         client->state = neyn_state_chunk_body;
     }
     else
     {
-        client->chunk.idx += ptr - string.ptr + 2;
+        client->chunk.idx += ptr - string.ptr;
         client->state = neyn_state_chunk_trailer;
     }
     return neyn_progress_incomplete;

@@ -5,8 +5,8 @@
 
 enum neyn_result
 {
-    neyn_result_failed,
     neyn_result_ok,
+    neyn_result_failed,
     neyn_result_body,
     neyn_result_nobody,
     neyn_result_transfer,

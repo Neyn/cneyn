@@ -62,6 +62,7 @@ void neyn_parser_alloc(struct neyn_parser *parser)
 
 void neyn_parser_realloc(struct neyn_parser *parser)
 {
+    parser->request->header.len += 1;
     neyn_size previous = parser->request->header.len;
     for (char *i = parser->ptr; i < parser->finish - 1; ++i)
         parser->request->header.len += (i[0] == '\r' && i[1] == '\n');
@@ -117,6 +118,7 @@ enum neyn_result neyn_parser_header(struct neyn_parser *parser)
     }
     if (neyn_parser_icmp(&header->name, "Transfer-Encoding"))
     {
+        parser->transfer = 0;
         char *ptr = header->value.ptr + header->value.len - 7;
         if (header->value.len >= 7 && strncmp(ptr, "chunked", 7) == 0) parser->transfer = 1;
     }
@@ -151,20 +153,27 @@ enum neyn_result neyn_parser_main(struct neyn_parser *parser)
 enum neyn_result neyn_parser_chunk(struct neyn_parser *parser)
 {
     errno = 0;
-    parser->length = strtoul(parser->ptr, &parser->end, 16);
+    parser->end = parser->finish;
+
+    skip(neyn_result_failed) parser->length = strtoul(parser->ptr, &parser->end, 16);
     if (parser->ptr >= parser->end || (parser->length == 0 && errno != 0)) return neyn_result_failed;
     return neyn_result_ok;
 }
 
 enum neyn_result neyn_parser_trailer(struct neyn_parser *parser)
 {
+    skip(neyn_result_ok);
     neyn_parser_realloc(parser);
-    while (parser->end < parser->finish)
+
+    while (1)
     {
-        parser->ptr = parser->end + 2;
         parser->end = neyn_parser_find(parser);
         enum neyn_result result = neyn_parser_header_(parser);
         if (result != neyn_result_ok) return result;
+        if (parser->end >= parser->finish) break;
+        parser->ptr = parser->end + 2;
     }
     return neyn_result_ok;
 }
+
+// TODO change the way numbers are parsed. checking errno is wrong.
