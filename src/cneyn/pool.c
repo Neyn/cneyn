@@ -72,4 +72,11 @@ void neyn_pool_free(struct neyn_pool *pool, struct neyn_wrapper *client)
     // TODO free if this is the last block and not the first one and the block is empty
     struct neyn_block *block = pool->block[client->major];
     block->bits[client->minor / LEN] |= 1ULL << (client->minor % LEN);
+    if (client->major > 0 && client->major == pool->len - 1)
+    {
+        unsigned int i = 0;
+        for (; i < LEN; ++i)
+            if (ULLONG_MAX != (unsigned long long)pool->block[i]->bits[i]) break;
+        if (i == LEN) --pool->len, free(pool->block[pool->len]);
+    }
 }

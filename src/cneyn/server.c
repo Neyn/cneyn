@@ -148,7 +148,7 @@ int neyn_server_process(struct neyn_thread *thread, struct epoll_event *event)
     {
         neyn_client_error(client, neyn_status_request_timeout);
         neyn_client_prepare(client);
-        progress = neyn_client_output(client);
+        neyn_client_output(client);
         return 0;
     }
     struct itimerspec time = neyn_server_timer(thread->server);
