@@ -53,6 +53,52 @@ char *neyn_parser_find(struct neyn_parser *parser)
     return parser->finish;
 }
 
+uint16_t neyn_parser_stou16(char *ptr, char **finish, int *ok)
+{
+    char *i = ptr;
+    neyn_size number = 0;
+    for (; i <= ptr + 4; ++i)
+    {
+        if (i[0] < '0' || '9' < i[0]) break;
+        number = number * 10 + (i[0] - '0');
+    }
+    *finish = i, *ok = (i != ptr) && (i[0] < '0' || '9' < i[0]);
+    return number;
+}
+
+neyn_size neyn_parser_stons(char *ptr, char **finish, int *ok)
+{
+    char *i = ptr;
+    neyn_size number = 0;
+    for (; i <= ptr + (sizeof(neyn_size) == 4 ? 9 : 19); ++i)
+    {
+        if (i[0] < '0' || '9' < i[0]) break;
+        number = number * 10 + (i[0] - '0');
+    }
+    *finish = i, *ok = (i != ptr) && (i[0] < '0' || '9' < i[0]);
+    return number;
+}
+
+neyn_size neyn_parser_htons(char *ptr, char **finish, int *ok)
+{
+    char *i = ptr;
+    neyn_size number = 0;
+    for (; i <= ptr + 2 * sizeof(neyn_size); ++i)
+    {
+        if ('0' <= i[0] && i[0] <= '9')
+            number = number * 16 + (i[0] - '0');
+        else if ('a' <= i[0] && i[0] <= 'f')
+            number = number * 16 + (i[0] - 'a') + 10;
+        else if ('A' <= i[0] && i[0] <= 'F')
+            number = number * 16 + (i[0] - 'A') + 10;
+        else
+            break;
+    }
+    *finish = i;
+    *ok = (i != ptr) && (i[0] < '0' || '9' < i[0]) && (i[0] < 'a' || 'f' < i[0]) && (i[0] < 'A' || 'F' < i[0]);
+    return number;
+}
+
 void neyn_parser_alloc(struct neyn_parser *parser)
 {
     for (char *i = parser->ptr; i < parser->finish - 1; ++i)
@@ -75,6 +121,7 @@ void neyn_parser_realloc(struct neyn_parser *parser)
 
 enum neyn_result neyn_parser_request(struct neyn_parser *parser)
 {
+    int ok;
     skip(neyn_result_failed) parser->request->method.ptr = parser->ptr;
     find parser->request->method.len = parser->ptr - parser->request->method.ptr;
     if (neyn_parser_method(&parser->request->method) != 1) return neyn_result_not_implemented;
@@ -83,12 +130,12 @@ enum neyn_result neyn_parser_request(struct neyn_parser *parser)
     find parser->request->path.len = parser->ptr - parser->request->path.ptr;
 
     skip(neyn_result_failed) if (strncmp(parser->ptr, "HTTP/", 5) != 0) return neyn_result_failed;
-    parser->ptr += 5, parser->request->major = (uint16_t)strtoul(parser->ptr, &parser->ptr, 10);
-    if (parser->request->major == 0 && errno != 0) return neyn_result_failed;
+    parser->ptr += 5, parser->request->major = neyn_parser_stou16(parser->ptr, &parser->ptr, &ok);
+    if (!ok) return neyn_result_failed;
     if (parser->request->major > 1) return neyn_result_not_supported;
 
-    next('.') parser->request->minor = (uint16_t)strtoul(parser->ptr, &parser->ptr, 10);
-    if (parser->request->minor == 0 && errno != 0) return neyn_result_failed;
+    next('.') parser->request->minor = neyn_parser_stou16(parser->ptr, &parser->ptr, &ok);
+    if (!ok) return neyn_result_failed;
     skip(neyn_result_ok) return neyn_result_failed;
 }
 
@@ -108,13 +155,13 @@ enum neyn_result neyn_parser_header(struct neyn_parser *parser)
     enum neyn_result result = neyn_parser_header_(parser);
     if (result != neyn_result_ok) return result;
 
+    int ok;
     struct neyn_header *header = parser->header - 1;
     if (neyn_parser_icmp(&header->name, "Content-Length") == 1)
     {
-        char *ptr;
         neyn_size prev = parser->length;
-        parser->length = strtoul(header->value.ptr, &ptr, 10);
-        if (ptr != parser->ptr || (parser->length == 0 && errno != 0)) return neyn_result_failed;
+        parser->length = neyn_parser_stons(header->value.ptr, &parser->ptr, &ok);
+        if (!ok) return neyn_result_failed;
         if (prev != (neyn_size)-1 && prev != parser->length) return neyn_result_failed;
     }
     if (neyn_parser_icmp(&header->name, "Transfer-Encoding"))
@@ -128,7 +175,6 @@ enum neyn_result neyn_parser_header(struct neyn_parser *parser)
 
 enum neyn_result neyn_parser_main(struct neyn_parser *parser)
 {
-    errno = 0;
     parser->transfer = 0;
     parser->length = (neyn_size)-1;
 
@@ -145,19 +191,20 @@ enum neyn_result neyn_parser_main(struct neyn_parser *parser)
         if (result != neyn_result_ok) return result;
     }
 
-    if (neyn_parser_body(&parser->request->method) != 1 || parser->length == 0) return neyn_result_nobody;
     if (parser->length != (neyn_size)-1 && parser->transfer == 1) return neyn_result_failed;
+    if (parser->length == 0) return neyn_result_nobody;
     if (parser->length != (neyn_size)-1) return neyn_result_body;
-    return (parser->transfer == 1) ? neyn_result_transfer : neyn_result_failed;
+    if (parser->transfer == 1) return neyn_result_transfer;
+    if (neyn_parser_body(&parser->request->method) != 1) return neyn_result_nobody;
+    return neyn_result_failed;
 }
 
 enum neyn_result neyn_parser_chunk(struct neyn_parser *parser)
 {
-    errno = 0;
+    int ok;
     parser->end = parser->finish;
-
-    skip(neyn_result_failed) parser->length = strtoul(parser->ptr, &parser->end, 16);
-    if (parser->ptr >= parser->end || (parser->length == 0 && errno != 0)) return neyn_result_failed;
+    skip(neyn_result_failed) parser->length = neyn_parser_htons(parser->ptr, &parser->end, &ok);
+    if (!ok) return neyn_result_failed;
     return neyn_result_ok;
 }
 
@@ -176,5 +223,3 @@ enum neyn_result neyn_parser_trailer(struct neyn_parser *parser)
     }
     return neyn_result_ok;
 }
-
-// TODO change the way numbers are parsed. checking errno is wrong.
