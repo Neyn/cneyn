@@ -57,7 +57,7 @@ uint16_t neyn_parser_stou16(char *ptr, char **finish, int *ok)
 {
     char *i = ptr;
     neyn_size number = 0;
-    for (; i <= ptr + 4; ++i)
+    for (; i < ptr + 4; ++i)
     {
         if (i[0] < '0' || '9' < i[0]) break;
         number = number * 10 + (i[0] - '0');
@@ -70,7 +70,7 @@ neyn_size neyn_parser_stons(char *ptr, char **finish, int *ok)
 {
     char *i = ptr;
     neyn_size number = 0;
-    for (; i <= ptr + (sizeof(neyn_size) == 4 ? 9 : 19); ++i)
+    for (; i < ptr + (sizeof(neyn_size) == 4 ? 9 : 19); ++i)
     {
         if (i[0] < '0' || '9' < i[0]) break;
         number = number * 10 + (i[0] - '0');
@@ -83,7 +83,7 @@ neyn_size neyn_parser_htons(char *ptr, char **finish, int *ok)
 {
     char *i = ptr;
     neyn_size number = 0;
-    for (; i <= ptr + 2 * sizeof(neyn_size); ++i)
+    for (; i < ptr + 2 * sizeof(neyn_size); ++i)
     {
         if ('0' <= i[0] && i[0] <= '9')
             number = number * 16 + (i[0] - '0');
