@@ -136,6 +136,6 @@ struct neyn_response
 
 void neyn_response_init(struct neyn_response *response);
 
-void neyn_response_write(struct neyn_request *request, struct neyn_response *response);
+void neyn_response_write(const struct neyn_request *request, struct neyn_response *response);
 
 #endif  // CNEYN_COMMON_H

@@ -90,18 +90,18 @@ void neyn_response_init(struct neyn_response *response)
     response->file = NULL;
 }
 
-neyn_size neyn_response_len(struct neyn_response *response, int transfer)
+neyn_size neyn_response_len(struct neyn_response *response, int nobody)
 {
     const char *str = "HTTP/1.1 xxx \r\n\r\n";
     neyn_size size = strlen(str) + strlen(neyn_status_phrase[response->status]) + response->extra.len;
-    if (!transfer) size += response->body.len;
+    if (!nobody) size += response->body.len;
 
     for (struct neyn_header *i = response->header.ptr; i < response->header.ptr + response->header.len; ++i)
         size += i->name.len + 2 + i->value.len + 2;
     return size;
 }
 
-char *neyn_response_ptr(char *ptr, struct neyn_response *response, int transfer)
+char *neyn_response_ptr(char *ptr, struct neyn_response *response, int nobody)
 {
     const char *status = neyn_status_code[response->status];
     const char *phrase = neyn_status_phrase[response->status];
@@ -117,7 +117,7 @@ char *neyn_response_ptr(char *ptr, struct neyn_response *response, int transfer)
 
     ptr = memcpy(ptr, response->extra.ptr, response->extra.len) + response->extra.len;
     ptr = strcpy(ptr, "\r\n") + 2;
-    if (transfer == 0) ptr = memcpy(ptr, response->body.ptr, response->body.len) + response->body.len;
+    if (!nobody) ptr = memcpy(ptr, response->body.ptr, response->body.len) + response->body.len;
     return ptr;
 }
 
@@ -138,11 +138,16 @@ void neyn_response_helper(struct neyn_response *response, int transfer)
     }
 }
 
-void neyn_response_write(struct neyn_request *request, struct neyn_response *response)
+void neyn_response_write(const struct neyn_request *request, struct neyn_response *response)
 {
     char buffer[128];
     response->extra.ptr = buffer;
     int transfer = (response->file != NULL) && (request->minor >= 1);
+
+    int nobody = transfer;
+    if (!nobody) nobody = response->status < neyn_status_ok;
+    if (!nobody) nobody = response->status == neyn_status_no_content || response->status == neyn_status_not_modified;
+    if (!nobody) nobody = (strncmp(request->method.ptr, "HEAD", request->method.len) == 0);
 
     size_t len = 0;
     if (response->file != NULL && !transfer)
@@ -155,7 +160,7 @@ void neyn_response_write(struct neyn_request *request, struct neyn_response *res
     struct neyn_client *client = response->client;
     client->file = response->file;
     neyn_response_helper(response, transfer);
-    client->len = neyn_response_len(response, transfer);
+    client->len = len + neyn_response_len(response, nobody);
 
     if (client->max < client->len)
     {
@@ -163,7 +168,7 @@ void neyn_response_write(struct neyn_request *request, struct neyn_response *res
         client->ptr = realloc(client->ptr, client->max);
     }
 
-    char *ptr = neyn_response_ptr(client->ptr, response, transfer);
+    char *ptr = neyn_response_ptr(client->ptr, response, nobody);
     if (client->file != NULL && !transfer)
     {
         fread(ptr, len, 1, client->file);

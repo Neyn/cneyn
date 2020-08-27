@@ -24,7 +24,7 @@ struct neyn_server
     struct neyn_config config;
     struct neyn_control *control;
     void *data;
-    void (*handler)(struct neyn_request *, struct neyn_response *, void *);
+    void (*handler)(const struct neyn_request *, struct neyn_response *, void *);
 };
 
 void neyn_server_init(struct neyn_server *server);
