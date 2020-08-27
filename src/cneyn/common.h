@@ -128,14 +128,14 @@ struct neyn_request
 struct neyn_response
 {
     enum neyn_status status;
-    struct neyn_string body;
     struct neyn_headers header;
+    struct neyn_string extra, body;
     void *client;
     FILE *file;
 };
 
 void neyn_response_init(struct neyn_response *response);
 
-void neyn_response_write(struct neyn_response *response);
+void neyn_response_write(struct neyn_request *request, struct neyn_response *response);
 
 #endif  // CNEYN_COMMON_H

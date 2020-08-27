@@ -90,18 +90,18 @@ void neyn_response_init(struct neyn_response *response)
     response->file = NULL;
 }
 
-neyn_size neyn_response_len(struct neyn_response *response, struct neyn_string *string)
+neyn_size neyn_response_len(struct neyn_response *response, int transfer)
 {
     const char *str = "HTTP/1.1 xxx \r\n\r\n";
-    neyn_size size = strlen(str) + strlen(neyn_status_phrase[response->status]);
-    if (response->file == NULL) size += response->body.len;
+    neyn_size size = strlen(str) + strlen(neyn_status_phrase[response->status]) + response->extra.len;
+    if (!transfer) size += response->body.len;
 
     for (struct neyn_header *i = response->header.ptr; i < response->header.ptr + response->header.len; ++i)
         size += i->name.len + 2 + i->value.len + 2;
-    return size + string->len;
+    return size;
 }
 
-void neyn_response_ptr(struct neyn_response *response, struct neyn_string *string, char *ptr)
+char *neyn_response_ptr(char *ptr, struct neyn_response *response, int transfer)
 {
     const char *status = neyn_status_code[response->status];
     const char *phrase = neyn_status_phrase[response->status];
@@ -115,37 +115,59 @@ void neyn_response_ptr(struct neyn_response *response, struct neyn_string *strin
         ptr = strcpy(ptr, "\r\n") + 2;
     }
 
-    ptr = memcpy(ptr, string->ptr, string->len) + string->len;
+    ptr = memcpy(ptr, response->extra.ptr, response->extra.len) + response->extra.len;
     ptr = strcpy(ptr, "\r\n") + 2;
-    if (response->file == NULL) ptr = memcpy(ptr, response->body.ptr, response->body.len);
+    if (transfer == 0) ptr = memcpy(ptr, response->body.ptr, response->body.len) + response->body.len;
+    return ptr;
 }
 
-void neyn_response_helper(struct neyn_response *response, struct neyn_string *string)
+void neyn_response_helper(struct neyn_response *response, int transfer)
 {
-    const char *format;
-    if (response->file == NULL)
-        format = "Content-Length: %zu\r\nUser-Agent: Neyn/%u.%u.%u\r\nConnection: Close\r\n";
-    else
-        format = "Transfer-Encoding: chunked\r\nUser-Agent: Neyn/%u.%u.%u\r\nConnection: Close\r\n";
+    const char *close = (response->status < neyn_status_ok) ? "" : "Connection: Close\r\n";
+    const int major = CNEYN_VERSION_MAJOR, minor = CNEYN_VERSION_MINOR, patch = CNEYN_VERSION_PATCH;
 
-    string->len = sprintf(string->ptr, format, response->body.len,  //
-                          CNEYN_VERSION_MAJOR, CNEYN_VERSION_MINOR, CNEYN_VERSION_PATCH);
+    if (!transfer)
+    {
+        const char *format = "Content-Length: %zu\r\nUser-Agent: Neyn/%u.%u.%u\r\n%s";
+        response->extra.len = sprintf(response->extra.ptr, format, response->body.len, major, minor, patch, close);
+    }
+    else
+    {
+        const char *format = "Transfer-Encoding: chunked\r\nUser-Agent: Neyn/%u.%u.%u\r\n%s";
+        response->extra.len = sprintf(response->extra.ptr, format, major, minor, patch, close);
+    }
 }
 
-void neyn_response_write(struct neyn_response *response)
+void neyn_response_write(struct neyn_request *request, struct neyn_response *response)
 {
     char buffer[128];
-    struct neyn_string string = {.ptr = buffer};
-    struct neyn_client *client = response->client;
+    response->extra.ptr = buffer;
+    int transfer = (response->file != NULL) && (request->minor >= 1);
 
+    size_t len = 0;
+    if (response->file != NULL && !transfer)
+    {
+        fseek(response->file, 0, SEEK_END);
+        len = ftell(response->file);
+        rewind(response->file);
+    }
+
+    struct neyn_client *client = response->client;
     client->file = response->file;
-    neyn_response_helper(response, &string);
-    client->len = neyn_response_len(response, &string);
+    neyn_response_helper(response, transfer);
+    client->len = neyn_response_len(response, transfer);
 
     if (client->max < client->len)
     {
         client->max = client->len;
         client->ptr = realloc(client->ptr, client->max);
     }
-    neyn_response_ptr(response, &string, client->ptr);
+
+    char *ptr = neyn_response_ptr(client->ptr, response, transfer);
+    if (client->file != NULL && !transfer)
+    {
+        fread(ptr, len, 1, client->file);
+        fclose(client->file);
+        client->file = NULL;
+    }
 }
