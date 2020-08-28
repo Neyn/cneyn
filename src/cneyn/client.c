@@ -22,12 +22,11 @@ enum neyn_read
 void neyn_client_init(struct neyn_client *client)
 {
     client->state = neyn_state_read_header;
-    client->max = 1024;
-    client->ptr = malloc(1024);
-
     client->idx = 0;
     client->len = 0;
+    client->max = 1024;
     client->file = NULL;
+    client->ptr = malloc(1024);
 
     client->request.body.len = 0;
     client->request.body.ptr = NULL;
