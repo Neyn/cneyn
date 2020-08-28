@@ -161,14 +161,15 @@ enum neyn_result neyn_parser_header(struct neyn_parser *parser)
     {
         neyn_size prev = parser->length;
         parser->length = neyn_parser_stons(header->value.ptr, &parser->ptr, &ok);
-        if (!ok) return neyn_result_failed;
+        if (!ok || header->value.ptr + header->value.len != parser->ptr) return neyn_result_failed;
         if (prev != (neyn_size)-1 && prev != parser->length) return neyn_result_failed;
     }
     if (neyn_parser_icmp(&header->name, "Transfer-Encoding"))
     {
-        parser->transfer = 0;
+        if (parser->transfer == 1) return neyn_result_failed;
         char *ptr = header->value.ptr + header->value.len - 7;
-        if (header->value.len >= 7 && strncmp(ptr, "chunked", 7) == 0) parser->transfer = 1;
+        if (header->value.len == 7 && strncmp(ptr, "chunked", 7) == 0) parser->transfer = 1;
+        if (header->value.len > 7 && strncmp(ptr - 1, ",chunked", 8) == 0) parser->transfer = 1;
     }
     return neyn_result_ok;
 }

@@ -121,19 +121,28 @@ char *neyn_response_ptr(char *ptr, struct neyn_response *response, int nobody)
     return ptr;
 }
 
-void neyn_response_helper(struct neyn_response *response, int transfer)
+void neyn_response_helper(struct neyn_response *response, int transfer, int nobody)
 {
+    const char *format;
     const char *close = (response->status < neyn_status_ok) ? "" : "Connection: Close\r\n";
     const int major = CNEYN_VERSION_MAJOR, minor = CNEYN_VERSION_MINOR, patch = CNEYN_VERSION_PATCH;
 
     if (!transfer)
     {
-        const char *format = "Content-Length: %zu\r\nUser-Agent: Neyn/%u.%u.%u\r\n%s";
-        response->extra.len = sprintf(response->extra.ptr, format, response->body.len, major, minor, patch, close);
+        if (nobody)
+        {
+            format = "User-Agent: Neyn/%u.%u.%u\r\n%s";
+            response->extra.len = sprintf(response->extra.ptr, format, major, minor, patch, close);
+        }
+        else
+        {
+            format = "Content-Length: %zu\r\nUser-Agent: Neyn/%u.%u.%u\r\n%s";
+            response->extra.len = sprintf(response->extra.ptr, format, response->body.len, major, minor, patch, close);
+        }
     }
     else
     {
-        const char *format = "Transfer-Encoding: chunked\r\nUser-Agent: Neyn/%u.%u.%u\r\n%s";
+        format = "Transfer-Encoding: chunked\r\nUser-Agent: Neyn/%u.%u.%u\r\n%s";
         response->extra.len = sprintf(response->extra.ptr, format, major, minor, patch, close);
     }
 }
@@ -159,7 +168,7 @@ void neyn_response_write(const struct neyn_request *request, struct neyn_respons
 
     struct neyn_client *client = response->client;
     client->file = response->file;
-    neyn_response_helper(response, transfer);
+    neyn_response_helper(response, transfer, nobody);
     client->len = len + neyn_response_len(response, nobody);
 
     if (client->max < client->len)
