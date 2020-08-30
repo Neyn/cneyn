@@ -109,8 +109,8 @@ void neyn_parser_alloc(struct neyn_parser *parser)
 
 void neyn_parser_realloc(struct neyn_parser *parser)
 {
-    parser->request->header.len += 1;
     neyn_size previous = parser->request->header.len;
+    parser->request->header.len += 1;
     for (char *i = parser->ptr; i < parser->finish - 1; ++i)
         parser->request->header.len += (i[0] == '\r' && i[1] == '\n');
 
@@ -167,9 +167,10 @@ enum neyn_result neyn_parser_header(struct neyn_parser *parser)
     if (neyn_parser_icmp(&header->name, "Transfer-Encoding"))
     {
         if (parser->transfer == 1) return neyn_result_failed;
-        char *ptr = header->value.ptr + header->value.len - 7;
-        if (header->value.len == 7 && strncmp(ptr, "chunked", 7) == 0) parser->transfer = 1;
-        if (header->value.len > 7 && strncmp(ptr - 1, ",chunked", 8) == 0) parser->transfer = 1;
+        parser->ptr = header->value.ptr + header->value.len - 7;
+        if (header->value.len == 7 && strncmp(parser->ptr, "chunked", 7) == 0) parser->transfer = 1;
+        if (header->value.len > 7 && strncmp(parser->ptr, "chunked", 7) == 0)
+            rskip if (parser->ptr[-1] == ',') parser->transfer = 1;
     }
     return neyn_result_ok;
 }
@@ -211,6 +212,7 @@ enum neyn_result neyn_parser_chunk(struct neyn_parser *parser)
 
 enum neyn_result neyn_parser_trailer(struct neyn_parser *parser)
 {
+    parser->end = parser->finish;
     skip(neyn_result_ok);
     neyn_parser_realloc(parser);
 

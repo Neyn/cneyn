@@ -180,7 +180,7 @@ void neyn_response_write(const struct neyn_request *request, struct neyn_respons
     char *ptr = neyn_response_ptr(client->ptr, response, nobody);
     if (client->file != NULL && !transfer)
     {
-        fread(ptr, len, 1, client->file);
+        fread(ptr, 1, len, client->file);
         fclose(client->file);
         client->file = NULL;
     }
