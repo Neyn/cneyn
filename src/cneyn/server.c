@@ -136,10 +136,9 @@ enum neyn_error neyn_server_accept(struct neyn_thread *thread)
 
 int neyn_server_process(struct neyn_thread *thread, struct epoll_event *event)
 {
-    enum neyn_progress progress;
     struct neyn_client *client = event->data.ptr;
     if (client->socket < 0) return 1;
-    if ((event->events & EPOLLERR) || (event->events & EPOLLRDHUP)) return 0;
+    if (event->events & EPOLLERR) return 0;
 
     uint64_t result;
     if (read(client->timer, &result, sizeof(uint64_t)) == sizeof(uint64_t) && result > 0)
@@ -154,8 +153,8 @@ int neyn_server_process(struct neyn_thread *thread, struct epoll_event *event)
 
     if (event->events & EPOLLIN)
     {
-        progress = neyn_client_input(client);
-        if (progress == neyn_progress_error) return 0;
+        enum neyn_progress progress = neyn_client_input(client, event->events & EPOLLRDHUP);
+        if (progress == neyn_progress_terminate) return neyn_progress_terminate;
         if (progress == neyn_progress_complete)
         {
             neyn_client_repair(client);
@@ -175,7 +174,7 @@ int neyn_server_process(struct neyn_thread *thread, struct epoll_event *event)
     }
     if (event->events & EPOLLOUT)
     {
-        progress = neyn_client_output(client);
+        enum neyn_progress progress = neyn_client_output(client);
         if (progress == neyn_progress_nothing) return 1;
         if (progress != neyn_progress_incomplete) return 0;
     }

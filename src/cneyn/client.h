@@ -21,7 +21,7 @@ enum neyn_progress
     neyn_progress_complete,
     neyn_progress_incomplete,
     neyn_progress_nothing,
-    neyn_progress_error,
+    neyn_progress_terminate,
 };
 
 struct neyn_chunk
@@ -44,7 +44,7 @@ void neyn_client_init(struct neyn_client *client);
 
 void neyn_client_destroy(struct neyn_client *client);
 
-enum neyn_progress neyn_client_input(struct neyn_client *client);
+enum neyn_progress neyn_client_input(struct neyn_client *client, int done);
 
 enum neyn_progress neyn_client_output(struct neyn_client *client);
 

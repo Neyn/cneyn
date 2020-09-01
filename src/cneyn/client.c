@@ -15,6 +15,7 @@
 enum neyn_read
 {
     neyn_read_ok,
+    neyn_read_zero,
     neyn_read_failed,
     neyn_read_over_limit,
 };
@@ -65,7 +66,7 @@ enum neyn_read neyn_client_read(struct neyn_client *client)
 {
     int size;
     ioctl(client->socket, FIONREAD, &size);
-    if (size == 0) return neyn_read_ok;
+    if (size == 0) return neyn_read_zero;
     if (size < 0) return neyn_read_failed;
     if (client->lim > 0 && size + client->len >= client->lim) return neyn_read_over_limit;
 
@@ -218,12 +219,18 @@ void neyn_client_repair(struct neyn_client *client)
     if (client->state != neyn_state_chunk_trailer) neyn_input_repair(client);
 }
 
-enum neyn_progress neyn_client_input(struct neyn_client *client)
+enum neyn_progress neyn_client_input_(struct neyn_client *client, int *done)
 {
     enum neyn_progress progress = neyn_progress_incomplete;
     enum neyn_read read = neyn_client_read(client);
-    if (read == neyn_read_over_limit) neyn_client_error(client, neyn_status_payload_too_large);
-    if (read != neyn_read_ok) return neyn_progress_error;
+
+    if (read == neyn_read_over_limit)
+    {
+        neyn_client_error(client, neyn_status_payload_too_large);
+        return neyn_progress_failed;
+    }
+    if (read == neyn_read_zero) *done = 1;
+    if (read == neyn_read_failed) return neyn_progress_terminate;
 
     while (1)
     {
@@ -244,6 +251,13 @@ enum neyn_progress neyn_client_input(struct neyn_client *client)
         if (state == client->state) return progress;
     }
     return neyn_progress_nothing;
+}
+
+enum neyn_progress neyn_client_input(struct neyn_client *client, int done)
+{
+    enum neyn_progress progress = neyn_client_input_(client, &done);
+    if (done && progress != neyn_progress_complete) return neyn_progress_terminate;
+    return progress;
 }
 
 void neyn_client_prepare(struct neyn_client *client)
