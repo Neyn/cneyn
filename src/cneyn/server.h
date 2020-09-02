@@ -29,6 +29,8 @@ struct neyn_server
 
 void neyn_server_init(struct neyn_server *server);
 
+enum neyn_error neyn_single_run(struct neyn_server *server);
+
 enum neyn_error neyn_server_run(struct neyn_server *server, int block);
 
 void neyn_server_kill(struct neyn_server *server);

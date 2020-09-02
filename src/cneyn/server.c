@@ -39,8 +39,6 @@ void neyn_server_init(struct neyn_server *server)
     server->config.ipvn = neyn_address_ipv4;
 }
 
-void neyn_server_destroy(struct neyn_server *server) { free(server->control); }
-
 enum neyn_error neyn_server_create4(struct neyn_server *server)
 {
     int O = 1;
@@ -214,18 +212,50 @@ enum neyn_error neyn_server_listen_(struct neyn_thread *thread)
 
 void *neyn_server_listen(void *thread) { return (void *)neyn_server_listen_(thread); }
 
+enum neyn_error neyn_single_run_(struct neyn_thread *thread)
+{
+    thread->epoll = epoll_create(1024);
+    if (thread->epoll < 0) return neyn_error_epoll_create;
+    struct epoll_event _event = {.events = EPOLLEXCLUSIVE | EPOLLIN | EPOLLERR, .data.fd = thread->socket};
+    if (epoll_ctl(thread->epoll, EPOLL_CTL_ADD, thread->socket, &_event) < 0) return neyn_error_epoll_add;
+    return neyn_server_listen_(thread);
+}
+
+enum neyn_error neyn_single_run(struct neyn_server *server)
+{
+    struct neyn_control control;
+    struct neyn_thread thread;
+
+    control.len = 1;
+    control.socket = -1;
+    control.thread = &thread;
+    server->control = &control;
+
+    enum neyn_error error;
+    if (server->config.ipvn == neyn_address_ipv4) error = neyn_server_create4(server);
+    if (server->config.ipvn == neyn_address_ipv6) error = neyn_server_create6(server);
+    if (error != neyn_error_none)
+    {
+        if (control.socket >= 0) close(control.socket);
+        return error;
+    }
+
+    thread.server = server;
+    thread.socket = control.socket;
+    error = neyn_single_run_(&thread);
+    close(control.socket), close(thread.epoll);
+    return error;
+}
+
 enum neyn_error neyn_server_run_(struct neyn_control *control, int block)
 {
     for (struct neyn_thread *i = control->thread; i < control->thread + control->len; ++i)
     {
         i->epoll = epoll_create(1024);
         if (i->epoll < 0) return neyn_error_epoll_create;
-
         struct epoll_event _event = {.events = EPOLLEXCLUSIVE | EPOLLIN | EPOLLERR, .data.fd = i->socket};
         if (epoll_ctl(i->epoll, EPOLL_CTL_ADD, i->socket, &_event) < 0) return neyn_error_epoll_add;
-
-        int result = pthread_create(&i->thread, NULL, neyn_server_listen, i);
-        if (result) return neyn_error_thread_create;
+        if (pthread_create(&i->thread, NULL, neyn_server_listen, i)) return neyn_error_thread_create;
         i->flag = 1;
     }
 
@@ -245,14 +275,12 @@ enum neyn_error neyn_server_run(struct neyn_server *server, int block)
 
     enum neyn_error error;
     server->control->socket = -1;
-    if (server->config.ipvn == neyn_address_ipv4)
-        error = neyn_server_create4(server);
-    else
-        error = neyn_server_create6(server);
-
+    if (server->config.ipvn == neyn_address_ipv4) error = neyn_server_create4(server);
+    if (server->config.ipvn == neyn_address_ipv6) error = neyn_server_create6(server);
     if (error != neyn_error_none)
     {
         if (server->control->socket >= 0) close(server->control->socket);
+        free(server->control);
         return error;
     }
 
@@ -278,6 +306,7 @@ void neyn_server_kill(struct neyn_server *server)
         if (i->flag == 1) pthread_cancel(i->thread);
         if (i->epoll >= 0) close(i->socket);
     }
+
     close(server->control->socket);
     free(server->control->thread);
     free(server->control);
