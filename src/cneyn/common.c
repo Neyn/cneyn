@@ -110,8 +110,9 @@ void neyn_response_helper(struct neyn_response *response, int chunked, int nobod
     }
     else
     {
+        neyn_size len = (response->file != NULL && !chunked) ? response->fsize : response->body.len;
         format = "Content-Length: %zu\r\nUser-Agent: Neyn/%u.%u.%u\r\n%s";
-        response->extra.len = sprintf(response->extra.ptr, format, response->body.len, major, minor, patch, close);
+        response->extra.len = sprintf(response->extra.ptr, format, len, major, minor, patch, close);
     }
 }
 
