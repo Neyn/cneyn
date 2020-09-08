@@ -4,6 +4,7 @@
 #include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 
 const char *neyn_method_body[] = {"POST", "PUT", "PATCH"};
 
@@ -85,9 +86,33 @@ const char *neyn_status_phrase[] = {
 void neyn_response_init(struct neyn_response *response)
 {
     response->status = neyn_status_ok;
+    response->fsize = 0;
     response->body.len = 0;
     response->header.len = 0;
     response->file = NULL;
+}
+
+void neyn_response_helper(struct neyn_response *response, int chunked, int nobody)
+{
+    const char *format;
+    const char *close = (response->status < neyn_status_ok) ? "" : "Connection: Close\r\n";
+    const int major = CNEYN_VERSION_MAJOR, minor = CNEYN_VERSION_MINOR, patch = CNEYN_VERSION_PATCH;
+
+    if (chunked)
+    {
+        format = "Transfer-Encoding: chunked\r\nUser-Agent: Neyn/%u.%u.%u\r\n%s";
+        response->extra.len = sprintf(response->extra.ptr, format, major, minor, patch, close);
+    }
+    else if (nobody)
+    {
+        format = "User-Agent: Neyn/%u.%u.%u\r\n%s";
+        response->extra.len = sprintf(response->extra.ptr, format, major, minor, patch, close);
+    }
+    else
+    {
+        format = "Content-Length: %zu\r\nUser-Agent: Neyn/%u.%u.%u\r\n%s";
+        response->extra.len = sprintf(response->extra.ptr, format, response->body.len, major, minor, patch, close);
+    }
 }
 
 neyn_size neyn_response_len(struct neyn_response *response, int nobody)
@@ -121,55 +146,28 @@ char *neyn_response_ptr(char *ptr, struct neyn_response *response, int nobody)
     return ptr;
 }
 
-void neyn_response_helper(struct neyn_response *response, int transfer, int nobody)
-{
-    const char *format;
-    const char *close = (response->status < neyn_status_ok) ? "" : "Connection: Close\r\n";
-    const int major = CNEYN_VERSION_MAJOR, minor = CNEYN_VERSION_MINOR, patch = CNEYN_VERSION_PATCH;
-
-    if (!transfer)
-    {
-        if (nobody)
-        {
-            format = "User-Agent: Neyn/%u.%u.%u\r\n%s";
-            response->extra.len = sprintf(response->extra.ptr, format, major, minor, patch, close);
-        }
-        else
-        {
-            format = "Content-Length: %zu\r\nUser-Agent: Neyn/%u.%u.%u\r\n%s";
-            response->extra.len = sprintf(response->extra.ptr, format, response->body.len, major, minor, patch, close);
-        }
-    }
-    else
-    {
-        format = "Transfer-Encoding: chunked\r\nUser-Agent: Neyn/%u.%u.%u\r\n%s";
-        response->extra.len = sprintf(response->extra.ptr, format, major, minor, patch, close);
-    }
-}
-
 void neyn_response_write(const struct neyn_request *request, struct neyn_response *response)
 {
+    int isfile = (response->file != NULL);
+
+    int chunked = isfile                    //
+                  && (request->major >= 1)  //
+                  && (request->minor >= 1)  //
+                  && (response->fsize > CNEYN_BUFFER_LEN);
+
+    int nobody = (response->status < neyn_status_ok)                //
+                 || (response->status == neyn_status_no_content)    //
+                 || (response->status == neyn_status_not_modified)  //
+                 || (strncmp(request->method.ptr, "HEAD", request->method.len) == 0);
+
     char buffer[128];
     response->extra.ptr = buffer;
-    int transfer = (response->file != NULL) && (request->minor >= 1);
-
-    int nobody = transfer;
-    if (!nobody) nobody = response->status < neyn_status_ok;
-    if (!nobody) nobody = response->status == neyn_status_no_content || response->status == neyn_status_not_modified;
-    if (!nobody) nobody = (strncmp(request->method.ptr, "HEAD", request->method.len) == 0);
-
-    size_t len = 0;
-    if (response->file != NULL && !transfer)
-    {
-        fseek(response->file, 0, SEEK_END);
-        len = ftell(response->file);
-        rewind(response->file);
-    }
+    neyn_response_helper(response, chunked, nobody);
 
     struct neyn_client *client = response->client;
-    client->file = response->file;
-    neyn_response_helper(response, transfer, nobody);
-    client->len = len + neyn_response_len(response, nobody);
+    if (chunked) client->file = response->file;
+    client->len = neyn_response_len(response, isfile || nobody);
+    if (isfile && !chunked) client->len += response->fsize;
 
     if (client->max < client->len)
     {
@@ -177,11 +175,18 @@ void neyn_response_write(const struct neyn_request *request, struct neyn_respons
         client->ptr = realloc(client->ptr, client->max);
     }
 
-    char *ptr = neyn_response_ptr(client->ptr, response, nobody);
-    if (client->file != NULL && !transfer)
+    char *ptr = neyn_response_ptr(client->ptr, response, isfile || nobody);
+    if (isfile && !chunked)
     {
-        fread(ptr, 1, len, client->file);
-        fclose(client->file);
-        client->file = NULL;
+        fread(ptr, 1, response->fsize, response->file);
+        fclose(response->file);
     }
+}
+
+FILE *neyn_file_open(const char *path, neyn_size *size)
+{
+    struct stat st;
+    if (stat(path, &st) != 0 || !S_ISREG(st.st_mode)) return NULL;
+    *size = st.st_size;
+    return fopen(path, "rb");
 }
