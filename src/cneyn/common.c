@@ -94,8 +94,7 @@ void neyn_response_init(struct neyn_response *response)
 
 void neyn_response_helper(struct neyn_response *response, int chunked, int nobody)
 {
-    const char *format;
-    const char *close = (response->status < neyn_status_ok) ? "" : "Connection: Close\r\n";
+    const char *format, *close = (response->status < neyn_status_ok) ? "" : "Connection: Close\r\n";
     const int major = CNEYN_VERSION_MAJOR, minor = CNEYN_VERSION_MINOR, patch = CNEYN_VERSION_PATCH;
 
     if (chunked)
@@ -186,8 +185,8 @@ void neyn_response_write(const struct neyn_request *request, struct neyn_respons
 
 FILE *neyn_file_open(const char *path, neyn_size *size)
 {
-    struct stat st;
-    if (stat(path, &st) != 0 || !S_ISREG(st.st_mode)) return NULL;
-    *size = st.st_size;
+    struct stat info;
+    if (stat(path, &info) != 0 || !S_ISREG(info.st_mode)) return NULL;
+    *size = info.st_size;
     return fopen(path, "rb");
 }

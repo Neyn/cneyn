@@ -1,26 +1,27 @@
 #include "parser.h"
 
 #include <ctype.h>
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
-#define next(c) \
-    if (*(parser->ptr++) != c) return neyn_result_failed;
+#define next(ch) \
+    if ((parser->ptr++)[0] != ch) return neyn_result_failed;
 
-#define skip(r)                                                            \
+#define skip(ret)                                                          \
     while (parser->ptr[0] == ' ' || parser->ptr[0] == '\t') ++parser->ptr; \
-    if (parser->ptr >= parser->end) return r;
+    if (parser->ptr >= parser->end) return ret;
 
 #define rskip \
     while (parser->ptr[-1] == ' ' || parser->ptr[-1] == '\t') --parser->ptr;
 
-#define find                                                                                               \
-    while (!(parser->ptr[0] == ' ' || parser->ptr[0] == '\t') && parser->ptr < parser->end) ++parser->ptr; \
+#define find                                                                                            \
+    while (parser->ptr[0] != ' ' && parser->ptr[0] != '\t' && parser->ptr < parser->end) ++parser->ptr; \
     if (parser->ptr >= parser->end) return neyn_result_failed;
 
-#define cfind                                                                                                        \
-    while (!(parser->ptr[0] == ' ' || parser->ptr[0] == '\t' || parser->ptr[0] == ':') && parser->ptr < parser->end) \
-        ++parser->ptr;                                                                                               \
+#define cfind                                                                                                     \
+    while (parser->ptr[0] != ' ' && parser->ptr[0] != '\t' && parser->ptr[0] != ':' && parser->ptr < parser->end) \
+        ++parser->ptr;                                                                                            \
     if (parser->ptr >= parser->end) return neyn_result_failed;
 
 int neyn_parser_icmp(struct neyn_string *str, char *ptr)
@@ -99,24 +100,15 @@ neyn_size neyn_parser_htons(char *ptr, char **finish, int *ok)
     return number;
 }
 
-void neyn_parser_alloc(struct neyn_parser *parser)
+struct neyn_header *neyn_parser_expand(struct neyn_parser *parser)
 {
-    for (char *i = parser->ptr; i < parser->finish - 1; ++i)
-        parser->request->header.len += (i[0] == '\r' && i[1] == '\n');
-    parser->request->header.ptr = malloc(parser->request->header.len * sizeof(struct neyn_header));
-    parser->header = parser->request->header.ptr;
-}
-
-void neyn_parser_realloc(struct neyn_parser *parser)
-{
-    neyn_size previous = parser->request->header.len;
-    parser->request->header.len += 1;
-    for (char *i = parser->ptr; i < parser->finish - 1; ++i)
-        parser->request->header.len += (i[0] == '\r' && i[1] == '\n');
-
-    neyn_size size = parser->request->header.len * sizeof(struct neyn_header);
-    parser->request->header.ptr = realloc(parser->request->header.ptr, size);
-    parser->header = parser->request->header.ptr + previous;
+    neyn_size len = ++parser->request->header.len;
+    if (len > parser->max)
+    {
+        parser->max = pow(2, ceil(log2(len)));
+        parser->request->header.ptr = realloc(parser->request->header.ptr, parser->max * sizeof(struct neyn_header));
+    }
+    return parser->request->header.ptr + len - 1;
 }
 
 enum neyn_result neyn_parser_request(struct neyn_parser *parser)
@@ -141,13 +133,14 @@ enum neyn_result neyn_parser_request(struct neyn_parser *parser)
 
 enum neyn_result neyn_parser_header_(struct neyn_parser *parser)
 {
-    skip(neyn_result_failed) parser->header->name.ptr = parser->ptr;
-    cfind parser->header->name.len = parser->ptr - parser->header->name.ptr;
+    struct neyn_header *header = neyn_parser_expand(parser);
+    skip(neyn_result_failed) header->name.ptr = parser->ptr;
+    cfind header->name.len = parser->ptr - header->name.ptr;
     next(':') skip(neyn_result_failed);
 
-    parser->header->value.ptr = parser->ptr, parser->ptr = parser->end;
-    rskip parser->header->value.len = parser->ptr - parser->header->value.ptr;
-    return ++parser->header, neyn_result_ok;
+    header->value.ptr = parser->ptr, parser->ptr = parser->end;
+    rskip header->value.len = parser->ptr - header->value.ptr;
+    return neyn_result_ok;
 }
 
 enum neyn_result neyn_parser_header(struct neyn_parser *parser)
@@ -156,7 +149,7 @@ enum neyn_result neyn_parser_header(struct neyn_parser *parser)
     if (result != neyn_result_ok) return result;
 
     int ok;
-    struct neyn_header *header = parser->header - 1;
+    struct neyn_header *header = parser->request->header.ptr + parser->request->header.len - 1;
     if (neyn_parser_icmp(&header->name, "Content-Length") == 1)
     {
         neyn_size prev = parser->length;
@@ -179,8 +172,9 @@ enum neyn_result neyn_parser_main(struct neyn_parser *parser)
 {
     parser->transfer = 0;
     parser->length = (neyn_size)-1;
+    parser->max = 8;
+    parser->request->header.ptr = malloc(parser->max * sizeof(struct neyn_header));
 
-    neyn_parser_alloc(parser);
     parser->end = neyn_parser_find(parser);
     enum neyn_result result = neyn_parser_request(parser);
     if (result != neyn_result_ok) return result;
@@ -214,7 +208,7 @@ enum neyn_result neyn_parser_trailer(struct neyn_parser *parser)
 {
     parser->end = parser->finish;
     skip(neyn_result_ok);
-    neyn_parser_realloc(parser);
+    parser->max = pow(2, ceil(log2(parser->request->header.len)));
 
     while (1)
     {

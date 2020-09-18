@@ -16,8 +16,7 @@ enum neyn_result
 
 struct neyn_parser
 {
-    neyn_size transfer, length;
-    struct neyn_header *header;
+    neyn_size transfer, length, max;
     struct neyn_request *request;
     char *ptr, *end, *finish;
 };
