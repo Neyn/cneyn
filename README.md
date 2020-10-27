@@ -42,6 +42,8 @@ cmake --build .
 sudo cmake --install .
 ```
 
+sudo might be needed or not depending on the install destination. You can use ```CMAKE_INSTALL_PREFIX``` CMake variable to control the install destination and ```BUILD_SHARED_LIBS``` to control the type of library(shared or static).
+
 Then you can use it with various build systems. Here is an example of ```CMake```:
 
 ``` cmake
