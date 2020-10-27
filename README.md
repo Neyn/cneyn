@@ -99,9 +99,9 @@ Example:
 ``` c
 void handler(struct neyn_request *request, struct neyn_response *response, void *data)
 {
-  response->body.len = 5;
-  response->body.ptr = "Hello";
-  neyn_response_write(response);
+    response->body.len = 5;
+    response->body.ptr = "Hello";
+    neyn_response_write(response);
 }
 ```
 
@@ -119,6 +119,7 @@ server.config = config;
 You must call ```neyn_server_run``` function and pass the server object to it. If you want the function to be non-blocking you can pass 0 as the last arguement and 1 otherwise. You can stop a non-blocking server by calling ```neyn_server_kill``` on it. 
 
 Example:
+
 ``` c
 enum neyn_error error = neyn_server_run(&server, 1);
 printf("%i\n", error);
