@@ -103,7 +103,7 @@ void handler(struct neyn_request *request, struct neyn_response *response, void 
 }
 ```
 
-## Creating Server
+## Creating the Server
 You need to create a server object and pass the created configuration and handler function to it. Here is how:
 
 ``` c
