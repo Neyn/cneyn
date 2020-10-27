@@ -7,7 +7,7 @@
 - [Usage](#usage)
   - [Configuring](#configuring)
   - [Handling Requests](#handling-requests)
-  - [Creating Server](#creating-server)
+  - [Creating the Server](#creating-the-server)
   - [Running the Server](#running-the-server)
 - [Contributing](#contributing)
 - [License](#license)
