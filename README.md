@@ -13,7 +13,7 @@
 - [License](#license)
 
 # CNeyn
-```CNeyn``` is a fast Http library written in C. You can checkout [C++](https://github.com/Neyn/neynxx) and [Python](https://github.com/Neyn/neynpy) interfaces too. Some of the features:
+```CNeyn``` is a fast Http library with C interface. You can checkout [C++](https://github.com/Neyn/neynxx) and [Python](https://github.com/Neyn/neynpy) interfaces too. Some of the features:
 
 + Fast
 + Very Easy to Use
