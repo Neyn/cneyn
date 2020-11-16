@@ -146,7 +146,7 @@ char *neyn_response_ptr(char *ptr, struct neyn_response *response, int nobody)
     return ptr;
 }
 
-void neyn_response_write(const struct neyn_request *request, struct neyn_response *response)
+void neyn_response_finalize(const struct neyn_request *request, struct neyn_response *response)
 {
     int isfile = (response->file != NULL);
 

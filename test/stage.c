@@ -2,14 +2,14 @@
 #include <stdio.h>
 #include <string.h>
 
-void handler(struct neyn_request *request, struct neyn_response *response, void *data)
+void handler(const struct neyn_request *request, struct neyn_response *response, void *data)
 {
     printf("Request: V%i.%i\n", request->major, request->minor);
 
     (void)data;
     response->body.len = 5;
     response->body.ptr = "Hello";
-    neyn_response_write(response);
+    neyn_response_finalize(request, response);
 }
 
 int main()

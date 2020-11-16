@@ -47,7 +47,7 @@ void neyn_client_error(struct neyn_client *client, enum neyn_status status)
     neyn_response_init(&response);
     response.status = status;
     response.client = client;
-    neyn_response_write(&client->request, &response);
+    neyn_response_finalize(&client->request, &response);
 }
 
 void neyn_client_expand(struct neyn_client *client, int size)
